@@ -1,0 +1,119 @@
+boro_cd,cdta_name,boro_name,time_period,poverty_count,poverty_rate
+101,MN01 Financial District-Tribeca (CD 1 Equivalent),Manhattan,2016-20,3606,4.6
+101,MN01 Financial District-Tribeca (CD 1 Equivalent),Manhattan,2017-21,3376,4.65
+102,MN02 Greenwich Village-SoHo (CD 2 Equivalent),Manhattan,2016-20,6223,8
+102,MN02 Greenwich Village-SoHo (CD 2 Equivalent),Manhattan,2017-21,6962,8.633333333333333
+103,MN03 Lower East Side-Chinatown (CD 3 Equivalent),Manhattan,2016-20,39243,27.133333333333333
+103,MN03 Lower East Side-Chinatown (CD 3 Equivalent),Manhattan,2017-21,40335,27.2
+104,MN04 Chelsea-Hell's Kitchen (CD 4 Approximation),Manhattan,2016-20,13385,11.95
+104,MN04 Chelsea-Hell's Kitchen (CD 4 Approximation),Manhattan,2017-21,14839,12.75
+105,MN05 Midtown-Flatiron-Union Square (CD 5 Approximation),Manhattan,2016-20,4557,10.25
+105,MN05 Midtown-Flatiron-Union Square (CD 5 Approximation),Manhattan,2017-21,4798,10.25
+106,MN06 East Midtown-Murray Hill (CD 6 Approximation),Manhattan,2016-20,11545,8.675
+106,MN06 East Midtown-Murray Hill (CD 6 Approximation),Manhattan,2017-21,12074,8.9
+107,MN07 Upper West Side (CD 7 Approximation),Manhattan,2016-20,21864,11.333333333333334
+107,MN07 Upper West Side (CD 7 Approximation),Manhattan,2017-21,23215,11.566666666666666
+108,MN08 Upper East Side-Roosevelt Island (CD 8 Equivalent),Manhattan,2016-20,12977,6
+108,MN08 Upper East Side-Roosevelt Island (CD 8 Equivalent),Manhattan,2017-21,14462,6.533333333333333
+109,MN09 Morningside Heights-Hamilton Heights (CD 9 Equivalent),Manhattan,2016-20,24583,24.033333333333335
+109,MN09 Morningside Heights-Hamilton Heights (CD 9 Equivalent),Manhattan,2017-21,25359,24.333333333333332
+110,MN10 Harlem (CD 10 Equivalent),Manhattan,2016-20,30066,22.25
+110,MN10 Harlem (CD 10 Equivalent),Manhattan,2017-21,30236,21.950000000000003
+111,MN11 East Harlem (CD 11 Equivalent),Manhattan,2016-20,36803,31.05
+111,MN11 East Harlem (CD 11 Equivalent),Manhattan,2017-21,37227,30.65
+112,MN12 Washington Heights-Inwood (CD 12 Equivalent),Manhattan,2016-20,36365,18.033333333333335
+112,MN12 Washington Heights-Inwood (CD 12 Equivalent),Manhattan,2017-21,34752,16.666666666666668
+201,BX01 Melrose-Mott Haven-Port Morris (CD 1 Approximation),Bronx,2016-20,39048,41.099999999999994
+201,BX01 Melrose-Mott Haven-Port Morris (CD 1 Approximation),Bronx,2017-21,41036,42.2
+202,BX02 Longwood-Hunts Point (CD 2 Approximation),Bronx,2016-20,17987,35.650000000000006
+202,BX02 Longwood-Hunts Point (CD 2 Approximation),Bronx,2017-21,17447,33.15
+203,BX03 Morrisania-Crotona Park East (CD 3 Approximation),Bronx,2016-20,30071,35.3
+203,BX03 Morrisania-Crotona Park East (CD 3 Approximation),Bronx,2017-21,31520,36.1
+204,BX04 Highbridge-Concourse (CD 4 Approximation),Bronx,2016-20,49151,33.86666666666667
+204,BX04 Highbridge-Concourse (CD 4 Approximation),Bronx,2017-21,49561,32.53333333333333
+205,BX05 Morris Heights-Mount Hope (CD 5 Approximation),Bronx,2016-20,46251,34.9
+205,BX05 Morris Heights-Mount Hope (CD 5 Approximation),Bronx,2017-21,44753,32.6
+206,BX06 Tremont-Belmont-West Farms (CD 6 Approximation),Bronx,2016-20,32530,40.9
+206,BX06 Tremont-Belmont-West Farms (CD 6 Approximation),Bronx,2017-21,32690,40.233333333333334
+207,BX07 Fordham-Bedford Park-Norwood (CD 7 Approximation),Bronx,2016-20,37710,27.333333333333332
+207,BX07 Fordham-Bedford Park-Norwood (CD 7 Approximation),Bronx,2017-21,37879,26.633333333333333
+208,BX08 Riverdale-Kingsbridge-Marble Hill (CD 8 Approximation),Bronx,2016-20,17765,19.46666666666667
+208,BX08 Riverdale-Kingsbridge-Marble Hill (CD 8 Approximation),Bronx,2017-21,18752,19.5
+209,BX09 Soundview-Parkchester (CD 9 Approximation),Bronx,2016-20,43828,24.05
+209,BX09 Soundview-Parkchester (CD 9 Approximation),Bronx,2017-21,44131,24.275
+210,BX10 Co-op City-Throgs Neck (CD 10 Approximation),Bronx,2016-20,15909,13.725
+210,BX10 Co-op City-Throgs Neck (CD 10 Approximation),Bronx,2017-21,16501,13.925
+211,BX11 Pelham Parkway-Morris Park (CD 11 Approximation),Bronx,2016-20,20017,16.725
+211,BX11 Pelham Parkway-Morris Park (CD 11 Approximation),Bronx,2017-21,20134,16.35
+212,BX12 Wakefield-Williamsbridge-Eastchester (CD 12 Approximation),Bronx,2016-20,28784,17.366666666666667
+212,BX12 Wakefield-Williamsbridge-Eastchester (CD 12 Approximation),Bronx,2017-21,28887,17.1
+301,BK01 Williamsburg-Greenpoint (CD 1 Equivalent),Brooklyn,2016-20,48574,25.325
+301,BK01 Williamsburg-Greenpoint (CD 1 Equivalent),Brooklyn,2017-21,50578,25.2
+302,BK02 Downtown Brooklyn-Fort Greene (CD 2 Approximation),Brooklyn,2016-20,15903,12.8
+302,BK02 Downtown Brooklyn-Fort Greene (CD 2 Approximation),Brooklyn,2017-21,15638,11.975
+303,BK03 Bedford-Stuyvesant (CD 3 Approximation),Brooklyn,2016-20,41406,24.4
+303,BK03 Bedford-Stuyvesant (CD 3 Approximation),Brooklyn,2017-21,43548,24.1
+304,BK04 Bushwick (CD 4 Equivalent),Brooklyn,2016-20,27412,24.450000000000003
+304,BK04 Bushwick (CD 4 Equivalent),Brooklyn,2017-21,26629,22.5
+305,BK05 East New York-Cypress Hills (CD 5 Approximation),Brooklyn,2016-20,48910,26.26
+305,BK05 East New York-Cypress Hills (CD 5 Approximation),Brooklyn,2017-21,49149,24.26
+306,BK06 Park Slope-Carroll Gardens (CD 6 Approximation),Brooklyn,2016-20,12072,10.15
+306,BK06 Park Slope-Carroll Gardens (CD 6 Approximation),Brooklyn,2017-21,12092,9.8
+307,BK07 Sunset Park-Windsor Terrace (CD 7 Approximation),Brooklyn,2016-20,21654,16.9
+307,BK07 Sunset Park-Windsor Terrace (CD 7 Approximation),Brooklyn,2017-21,21012,15.833333333333332
+308,BK08 Crown Heights (North) (CD 8 Approximation),Brooklyn,2016-20,20896,15.65
+308,BK08 Crown Heights (North) (CD 8 Approximation),Brooklyn,2017-21,19449,13.9
+309,BK09 Crown Heights (South) (CD 9 Approximation),Brooklyn,2016-20,16062,16.85
+309,BK09 Crown Heights (South) (CD 9 Approximation),Brooklyn,2017-21,16523,16.75
+310,BK10 Bay Ridge-Dyker Heights (CD 10 Approximation),Brooklyn,2016-20,16917,15
+310,BK10 Bay Ridge-Dyker Heights (CD 10 Approximation),Brooklyn,2017-21,17753,14.95
+311,BK11 Bensonhurst-Bath Beach (CD 11 Approximation),Brooklyn,2016-20,30030,15.833333333333332
+311,BK11 Bensonhurst-Bath Beach (CD 11 Approximation),Brooklyn,2017-21,33755,17.066666666666666
+312,BK12 Borough Park-Kensington (CD 12 Approximation),Brooklyn,2016-20,50515,25.625
+312,BK12 Borough Park-Kensington (CD 12 Approximation),Brooklyn,2017-21,50367,24.025
+313,BK13 Coney Island-Brighton Beach (CD 13 Approximation),Brooklyn,2016-20,25195,23.5
+313,BK13 Coney Island-Brighton Beach (CD 13 Approximation),Brooklyn,2017-21,26992,23.566666666666666
+314,BK14 Flatbush-Midwood (CD 14 Approximation),Brooklyn,2016-20,24974,15.966666666666667
+314,BK14 Flatbush-Midwood (CD 14 Approximation),Brooklyn,2017-21,24255,14.9
+315,BK15 Sheepshead Bay-Gravesend (East) (CD 15 Approximation),Brooklyn,2016-20,21494,13.933333333333334
+315,BK15 Sheepshead Bay-Gravesend (East) (CD 15 Approximation),Brooklyn,2017-21,24248,15
+316,BK16 Ocean Hill-Brownsville (CD 16 Approximation),Brooklyn,2016-20,27432,32.55
+316,BK16 Ocean Hill-Brownsville (CD 16 Approximation),Brooklyn,2017-21,29051,32.25
+317,BK17 East Flatbush (CD 17 Approximation),Brooklyn,2016-20,22195,14.625
+317,BK17 East Flatbush (CD 17 Approximation),Brooklyn,2017-21,22246,14.075
+318,BK18 Canarsie-Flatlands (CD 18 Approximation),Brooklyn,2016-20,18874,8.799999999999999
+318,BK18 Canarsie-Flatlands (CD 18 Approximation),Brooklyn,2017-21,21528,9.633333333333333
+401,QN01 Astoria-Queensbridge (CD 1 Equivalent),Queens,2016-20,20572,14.14
+401,QN01 Astoria-Queensbridge (CD 1 Equivalent),Queens,2017-21,20112,13.18
+402,QN02 Long Island City-Sunnyside-Woodside (CD 2 Approximation),Queens,2016-20,9332,7.5
+402,QN02 Long Island City-Sunnyside-Woodside (CD 2 Approximation),Queens,2017-21,10090,7.866666666666667
+403,QN03 Jackson Heights-East Elmhurst (CD 3 Approximation),Queens,2016-20,21188,14.3
+403,QN03 Jackson Heights-East Elmhurst (CD 3 Approximation),Queens,2017-21,22036,14.033333333333333
+404,QN04 Elmhurst-Corona (CD 4 Approximation),Queens,2016-20,24620,15.55
+404,QN04 Elmhurst-Corona (CD 4 Approximation),Queens,2017-21,24366,14.649999999999999
+405,QN05 Ridgewood-Maspeth-Middle Village (CD 5 Approximation),Queens,2016-20,16936,8.825
+405,QN05 Ridgewood-Maspeth-Middle Village (CD 5 Approximation),Queens,2017-21,18891,9.325
+406,QN06 Forest Hills-Rego Park (CD 6 Approximation),Queens,2016-20,10245,9.899999999999999
+406,QN06 Forest Hills-Rego Park (CD 6 Approximation),Queens,2017-21,10006,9.35
+407,QN07 Flushing-Murray Hill-Whitestone (CD 7 Approximation),Queens,2016-20,34947,12.757142857142856
+407,QN07 Flushing-Murray Hill-Whitestone (CD 7 Approximation),Queens,2017-21,35685,13.085714285714285
+408,QN08 Fresh Meadows-Hillcrest-Briarwood (CD 8 Approximation),Queens,2016-20,19089,12.04
+408,QN08 Fresh Meadows-Hillcrest-Briarwood (CD 8 Approximation),Queens,2017-21,18864,11.700000000000001
+409,QN09 Kew Gardens-Richmond Hill-Woodhaven (CD 9 Approximation),Queens,2016-20,16517,11.74
+409,QN09 Kew Gardens-Richmond Hill-Woodhaven (CD 9 Approximation),Queens,2017-21,16779,11.28
+410,QN10 South Ozone Park-Howard Beach (CD 10 Approximation),Queens,2016-20,14600,11.6
+410,QN10 South Ozone Park-Howard Beach (CD 10 Approximation),Queens,2017-21,13822,9.733333333333334
+411,QN11 Auburndale-Bayside-Douglaston (CD 11 Approximation),Queens,2016-20,9029,7.4750000000000005
+411,QN11 Auburndale-Bayside-Douglaston (CD 11 Approximation),Queens,2017-21,10278,8.125
+412,QN12 Jamaica-St. Albans-Hollis (CD 12 Approximation),Queens,2016-20,26466,10.533333333333333
+412,QN12 Jamaica-St. Albans-Hollis (CD 12 Approximation),Queens,2017-21,29988,11.2
+413,QN13 Queens Village-Bellerose-Rosedale (CD 13 Approximation),Queens,2016-20,15474,7.428571428571429
+413,QN13 Queens Village-Bellerose-Rosedale (CD 13 Approximation),Queens,2017-21,15538,7.285714285714286
+414,QN14 The Rockaways (CD 14 Equivalent),Queens,2016-20,21152,15.833333333333334
+414,QN14 The Rockaways (CD 14 Equivalent),Queens,2017-21,23622,16.833333333333336
+501,SI01 North Shore (CD 1 Equivalent),Staten Island,2016-20,26702,17.128571428571426
+501,SI01 North Shore (CD 1 Equivalent),Staten Island,2017-21,25657,16.02857142857143
+502,SI02 Mid-Island (CD 2 Approximation),Staten Island,2016-20,14284,10.575
+502,SI02 Mid-Island (CD 2 Approximation),Staten Island,2017-21,14428,10.2
+503,SI03 South Shore (CD 3 Approximation),Staten Island,2016-20,9787,6.32
+503,SI03 South Shore (CD 3 Approximation),Staten Island,2017-21,10151,6.02

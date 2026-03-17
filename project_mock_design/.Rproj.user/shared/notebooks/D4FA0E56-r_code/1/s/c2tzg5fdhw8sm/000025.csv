@@ -1,0 +1,242 @@
+"0",""
+"0","# check boundary columns"
+"0","names(cd_boundaries)"
+"1","[1]"
+"1"," ""boro_cd""   "
+"1"," ""shape_leng"""
+"1"," ""shape_area"""
+"1"," ""geometry""  "
+"1","
+"
+"0","# ========================================================="
+"0","# 2. READ CLEANED DATASETS"
+"0","# ========================================================="
+"0","hvi_cd <- read_csv(""clean_data/hvi_cd_clean.csv"", show_col_types = FALSE) %>%"
+"0","  clean_names() %>%"
+"0","  mutate(boro_cd = as.character(boro_cd))"
+"0",""
+"0","demographics_cd <- read_csv(""clean_data/demographics_cd_clean.csv"", show_col_types = FALSE) %>%"
+"0","  clean_names() %>%"
+"0","  mutate(boro_cd = as.character(boro_cd))"
+"0",""
+"0","park_cd <- read_csv(""clean_data/park_with_cd.csv"", show_col_types = FALSE) %>%"
+"0","  clean_names() %>%"
+"0","  mutate(boro_cd = as.character(boro_cd))"
+"0",""
+"0","poverty_cd <- read_csv(""clean_data/poverty_cleaned.csv"", show_col_types = FALSE) %>%"
+"0","  clean_names() %>%"
+"0","  mutate(boro_cd = as.character(boro_cd))"
+"0",""
+"0","# ========================================================="
+"0","# 3. PREPARE UNIQUE boro_cd LIST FOR EACH DATASET"
+"0","# ========================================================="
+"0","hvi_keys <- hvi_cd %>%"
+"0","  distinct(boro_cd) %>%"
+"0","  mutate(in_hvi = ""Matched"")"
+"0",""
+"0","demographics_keys <- demographics_cd %>%"
+"0","  distinct(boro_cd) %>%"
+"0","  mutate(in_demo = ""Matched"")"
+"0",""
+"0","park_keys <- park_cd %>%"
+"0","  distinct(boro_cd) %>%"
+"0","  mutate(in_park = ""Matched"")"
+"0",""
+"0","poverty_keys <- poverty_cd %>%"
+"0","  distinct(boro_cd) %>%"
+"0","  mutate(in_poverty = ""Matched"")"
+"0",""
+"0","# ========================================================="
+"0","# 4. JOIN TO CD BOUNDARIES FOR QA MAPS"
+"0","# ========================================================="
+"0","map_hvi <- cd_boundaries %>%"
+"0","  left_join(hvi_keys, by = ""boro_cd"") %>%"
+"0","  mutate(in_hvi = replace_na(in_hvi, ""Missing""))"
+"0",""
+"0","map_demo <- cd_boundaries %>%"
+"0","  left_join(demographics_keys, by = ""boro_cd"") %>%"
+"0","  mutate(in_demo = replace_na(in_demo, ""Missing""))"
+"0",""
+"0","map_park <- cd_boundaries %>%"
+"0","  left_join(park_keys, by = ""boro_cd"") %>%"
+"0","  mutate(in_park = replace_na(in_park, ""Missing""))"
+"0",""
+"0","map_poverty <- cd_boundaries %>%"
+"0","  left_join(poverty_keys, by = ""boro_cd"") %>%"
+"0","  mutate(in_poverty = replace_na(in_poverty, ""Missing""))"
+"0",""
+"0","# ========================================================="
+"0","# 5. PRINT QA TABLES"
+"0","# ========================================================="
+"0","cat(""\n==============================\n"")"
+"1","
+==============================
+"
+"0","cat(""QA CHECK: DATASET boro_cd COVERAGE\n"")"
+"1","QA CHECK: DATASET boro_cd COVERAGE
+"
+"0","cat(""==============================\n"")"
+"1","==============================
+"
+"0","cat(""\nCD boundaries unique boro_cd:\n"")"
+"1","
+CD boundaries unique boro_cd:
+"
+"0","print(cd_boundaries %>% st_drop_geometry() %>% summarise(n_cd = n_distinct(boro_cd)))"
+"1"," "
+"1"," n_cd"
+"1","
+1"
+"1","   71"
+"1","
+"
+"0","cat(""\nHVI unique boro_cd:\n"")"
+"1","
+HVI unique boro_cd:
+"
+"0","print(hvi_cd %>% summarise(n_cd = n_distinct(boro_cd)))"
+"1","[38;5;246m# A tibble: 1 × 1[39m
+"
+"1","   n_cd
+"
+"1","  [3m[38;5;246m<int>[39m[23m
+"
+"1","[38;5;250m1[39m    71
+"
+"0","cat(""\nDemographics unique boro_cd:\n"")"
+"1","
+Demographics unique boro_cd:
+"
+"0","print(demographics_cd %>% summarise(n_cd = n_distinct(boro_cd)))"
+"1","[38;5;246m# A tibble: 1 × 1[39m
+"
+"1","   n_cd
+"
+"1","  [3m[38;5;246m<int>[39m[23m
+"
+"1","[38;5;250m1[39m    59
+"
+"0","cat(""\nPark unique boro_cd:\n"")"
+"1","
+Park unique boro_cd:
+"
+"0","print(park_cd %>% summarise(n_cd = n_distinct(boro_cd)))"
+"1","[38;5;246m# A tibble: 1 × 1[39m
+"
+"1","   n_cd
+"
+"1","  [3m[38;5;246m<int>[39m[23m
+"
+"1","[38;5;250m1[39m   105
+"
+"0","cat(""\nPoverty unique boro_cd:\n"")"
+"1","
+Poverty unique boro_cd:
+"
+"0","print(poverty_cd %>% summarise(n_cd = n_distinct(boro_cd)))"
+"1","[38;5;246m# A tibble: 1 × 1[39m
+"
+"1","   n_cd
+"
+"1","  [3m[38;5;246m<int>[39m[23m
+"
+"1","[38;5;250m1[39m    59
+"
+"0","cat(""\nboro_cd in HVI but not in boundaries:\n"")"
+"1","
+boro_cd in HVI but not in boundaries:
+"
+"0","print(anti_join(hvi_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = ""boro_cd""))"
+"1","[38;5;246m# A tibble: 0 × 2[39m
+"
+"1","[38;5;246m# ℹ 2 variables: boro_cd <chr>, in_hvi <chr>[39m
+"
+"0","cat(""\nboro_cd in Demographics but not in boundaries:\n"")"
+"1","
+boro_cd in Demographics but not in boundaries:
+"
+"0","print(anti_join(demographics_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = ""boro_cd""))"
+"1","[38;5;246m# A tibble: 0 × 2[39m
+"
+"1","[38;5;246m# ℹ 2 variables: boro_cd <chr>, in_demo <chr>[39m
+"
+"0","cat(""\nboro_cd in Park but not in boundaries:\n"")"
+"1","
+boro_cd in Park but not in boundaries:
+"
+"0","print(anti_join(park_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = ""boro_cd""))"
+"1","[38;5;246m# A tibble: 45 × 2[39m
+"
+"1","   boro_cd            in_park
+"
+"1","   [3m[38;5;246m<chr>[39m[23m              [3m[38;5;246m<chr>[39m[23m  
+"
+"1","[38;5;250m 1[39m 205207             Matched
+"
+"1","[38;5;250m 2[39m 309308             Matched
+"
+"1","[38;5;250m 3[39m 204205             Matched
+"
+"1","[38;5;250m 4[39m 110111107105108112 Matched
+"
+"1","[38;5;250m 5[39m 109110             Matched
+"
+"1","[38;5;250m 6[39m 108111             Matched
+"
+"1","[38;5;250m 7[39m 305405             Matched
+"
+"1","[38;5;250m 8[39m 315318             Matched
+"
+"1","[38;5;250m 9[39m 403404             Matched
+"
+"1","[38;5;250m10[39m 203206             Matched
+"
+"1","[38;5;246m# ℹ 35 more rows[39m
+"
+"1","[38;5;246m# ℹ Use `print(n = ...)` to see more rows[39m
+"
+"0","cat(""\nboro_cd in Poverty but not in boundaries:\n"")"
+"1","
+boro_cd in Poverty but not in boundaries:
+"
+"0","print(anti_join(poverty_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = ""boro_cd""))"
+"1","[38;5;246m# A tibble: 0 × 2[39m
+"
+"1","[38;5;246m# ℹ 2 variables: boro_cd <chr>, in_poverty <chr>[39m
+"
+"0","# ========================================================="
+"0","# 6. CREATE QA MAPS"
+"0","# ========================================================="
+"0","p_hvi <- ggplot(map_hvi) +"
+"0","  geom_sf(aes(fill = in_hvi), color = ""white"", linewidth = 0.2) +"
+"0","  labs("
+"0","    title = ""QA Map: HVI boro_cd Coverage"","
+"0","    fill = ""HVI"""
+"0","  ) +"
+"0","  theme_minimal()"
+"0",""
+"0","p_demo <- ggplot(map_demo) +"
+"0","  geom_sf(aes(fill = in_demo), color = ""white"", linewidth = 0.2) +"
+"0","  labs("
+"0","    title = ""QA Map: Demographics boro_cd Coverage"","
+"0","    fill = ""Demographics"""
+"0","  ) +"
+"0","  theme_minimal()"
+"0",""
+"0","p_park <- ggplot(map_park) +"
+"0","  geom_sf(aes(fill = in_park), color = ""white"", linewidth = 0.2) +"
+"0","  labs("
+"0","    title = ""QA Map: Park boro_cd Coverage"","
+"0","    fill = ""Park"""
+"0","  ) +"
+"0","  theme_minimal()"
+"0",""
+"0","p_poverty <- ggplot(map_poverty) +"
+"0","  geom_sf(aes(fill = in_poverty), color = ""white"", linewidth = 0.2) +"
+"0","  labs("
+"0","    title = ""QA Map: Poverty boro_cd Coverage"","
+"0","    fill = ""Poverty"""
+"0","  ) +"
+"0","  theme_minimal()"
+"0",""
+"0","print(p_hvi)"

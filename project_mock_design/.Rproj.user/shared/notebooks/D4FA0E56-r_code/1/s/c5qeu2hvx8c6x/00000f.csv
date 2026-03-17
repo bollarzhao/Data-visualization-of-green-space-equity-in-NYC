@@ -1,0 +1,6 @@
+"0","demographics_clean <- map_dfr("
+"0","  district_start_rows,"
+"0","  extract_district_profile,"
+"0","  data = demo_chr,"
+"0","  district_rows = district_start_rows"
+"0",")"

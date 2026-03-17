@@ -1,0 +1,1986 @@
+---
+title: "r_code"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# install.packages(c("sf", "tidyverse", "janitor"))
+
+library(sf)
+library(readxl)
+library(stringr)
+library(readr)
+library(tidyr)
+library(janitor)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+```
+
+# Data cleaning
+
+```{r}
+demo_raw <- read_excel(
+  "data/sf1_dp_cd_demoprofile.xlsx",
+  sheet = "CD Profiles",
+  col_names = FALSE
+)
+```
+```{r}
+dim(demo_raw)
+demo_raw[1:20, 1:8]
+```
+
+```{r}
+demo_chr <- demo_raw %>%
+  mutate(across(everything(), as.character))
+```
+
+```{r}
+tmp_labels <- pmap_chr(
+  demo_chr[, 1:5],
+  function(...) {
+    vals <- c(...)
+    vals <- vals[!is.na(vals) & vals != ""]
+    str_squish(paste(vals, collapse = " "))
+  }
+)
+
+demo_chr <- demo_chr %>%
+  mutate(row_label = tmp_labels)
+```
+
+```{r}
+demo_chr[1:20, c(1:6, ncol(demo_chr))]
+```
+
+```{r}
+district_start_rows <- which(
+  str_detect(
+    demo_chr$row_label,
+    "^(Bronx|Brooklyn|Manhattan|Queens|Staten Island) Community District [0-9]+$"
+  )
+)
+
+length(district_start_rows)
+district_start_rows[1:10]
+demo_chr$row_label[district_start_rows[1:10]]
+```
+
+```{r}
+extract_district_profile <- function(start_row, data, district_rows) {
+  
+  next_rows <- district_rows[district_rows > start_row]
+  
+  if (length(next_rows) > 0) {
+    end_row <- min(next_rows) - 1
+  } else {
+    end_row <- nrow(data)
+  }
+  
+  block <- data[start_row:end_row, ]
+  
+  district_name <- block$row_label[1] %>% str_trim()
+  
+  borough <- str_extract(district_name, "^(Bronx|Brooklyn|Manhattan|Queens|Staten Island)")
+  district_n <- as.integer(str_extract(district_name, "[0-9]+$"))
+  
+  borough_prefix <- case_when(
+    borough == "Manhattan" ~ 100,
+    borough == "Bronx" ~ 200,
+    borough == "Brooklyn" ~ 300,
+    borough == "Queens" ~ 400,
+    borough == "Staten Island" ~ 500
+  )
+  
+  boro_cd <- borough_prefix + district_n
+  
+  get_2010_value <- function(label_pattern) {
+    row_id <- which(str_detect(block$row_label, regex(label_pattern, ignore_case = TRUE)))
+    
+    if (length(row_id) == 0) return(NA_real_)
+    
+    row_vals <- unlist(block[row_id[1], ])
+    nums <- suppressWarnings(parse_number(row_vals))
+    nums <- nums[!is.na(nums)]
+    
+    if (length(nums) == 0) return(NA_real_)
+    
+    if (length(nums) >= 3) {
+      return(nums[3])
+    } else {
+      return(NA_real_)
+    }
+  }
+  
+  tibble(
+    boro_cd = boro_cd,
+    borough = borough,
+    district_n = district_n,
+    district_name = district_name,
+    population_2010 = get_2010_value("^Total Population$"),
+    white_nonhisp_2010 = get_2010_value("White\\s+Nonhispanic"),
+    black_nonhisp_2010 = get_2010_value("Black\\s+Nonhispanic"),
+    asian_pi_nonhisp_2010 = get_2010_value("Asian and Pacific Islander\\s+Nonhispanic"),
+    other_nonhisp_2010 = get_2010_value("Other\\s+Nonhispanic"),
+    two_plus_nonhisp_2010 = get_2010_value("Two or More Races\\s+Nonhispanic"),
+    hispanic_2010 = get_2010_value("Hispanic Origin")
+  )
+}
+```
+
+```{r}
+demographics_clean <- map_dfr(
+  district_start_rows,
+  extract_district_profile,
+  data = demo_chr,
+  district_rows = district_start_rows
+)
+```
+
+```{r}
+nrow(demographics_clean)
+glimpse(demographics_clean)
+```
+```{r}
+demographics_clean <- demographics_clean %>%
+  mutate(
+    pct_white_nonhisp_2010 = white_nonhisp_2010 / population_2010,
+    pct_black_nonhisp_2010 = black_nonhisp_2010 / population_2010,
+    pct_asian_pi_nonhisp_2010 = asian_pi_nonhisp_2010 / population_2010,
+    pct_hispanic_2010 = hispanic_2010 / population_2010,
+    pct_nonwhite_2010 = 1 - pct_white_nonhisp_2010
+  )
+```
+
+```{r}
+demographics_clean %>%
+  select(
+    boro_cd,
+    borough,
+    district_n,
+    district_name,
+    population_2010,
+    white_nonhisp_2010,
+    black_nonhisp_2010,
+    asian_pi_nonhisp_2010,
+    hispanic_2010,
+    pct_nonwhite_2010
+  ) %>%
+  arrange(boro_cd) %>%
+  head(15)
+```
+
+```{r}
+nrow(demographics_clean)
+sum(is.na(demographics_clean$population_2010))
+sum(is.na(demographics_clean$white_nonhisp_2010))
+sum(is.na(demographics_clean$pct_nonwhite_2010))
+range(demographics_clean$population_2010, na.rm = TRUE)
+range(demographics_clean$pct_nonwhite_2010, na.rm = TRUE)
+```
+```{r}
+dir.create("clean_data", recursive = TRUE, showWarnings = FALSE)
+
+write_csv(
+  demographics_clean,
+  "clean_data/demographics_cd_clean.csv"
+)
+```
+
+```{r}
+sum(is.na(demographics_clean$pct_nonwhite_2010))
+range(demographics_clean$pct_nonwhite_2010, na.rm = TRUE)
+```
+
+```{r}
+park_cd <- st_read("data/Parks_Properties_20260314.geojson") %>%
+  clean_names() %>%
+  st_drop_geometry() %>%
+  mutate(
+    across(where(is.character), ~ str_trim(.)),
+    across(where(is.character), ~ na_if(., "")),
+    across(where(is.character), ~ na_if(., "NA")),
+    across(where(is.character), ~ na_if(., "N/A")),
+    across(where(is.character), ~ na_if(., "null")),
+    across(where(is.character), ~ replace_na(., "Unknown")),
+    boro_cd = as.character(communityboard)
+  )
+
+# ── 2. Inspect ───────────────────────────────────────────────────────
+glimpse(park_cd)
+park_cd %>% summarise(across(everything(), ~ sum(is.na(.))))
+
+# ── 3. Export ────────────────────────────────────────────────────────
+write_csv(park_cd, "clean_data/park_with_cd.csv")
+```
+
+
+
+```{r}
+hvi_raw <- read_csv("data/Heat_Vulnerability_Index_Rankings_20260314.csv") %>%
+  clean_names() %>%
+  rename(
+    zcta = zip_code_tabulation_area_zcta_2020,
+    hvi  = heat_vulnerability_index_hvi
+  ) %>%
+  mutate(
+    zcta = as.character(zcta),
+    hvi  = as.numeric(hvi)
+  )
+
+cd_boundaries <- st_read("data/databoundaries/geo_export_3436ec5d-9845-403d-82b8-c46c8a58d650.shp") %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+zcta_boundaries <- st_read("data/zcta/geo_export_6cac0758-54de-4d67-8d21-48cdf69cbc52.shp") %>%
+  clean_names() %>%
+  mutate(zcta = as.character(zcta))
+
+# ── 2. Merge HVI onto ZCTA boundaries, then map to community districts ──
+hvi_cd <- zcta_boundaries %>%
+  left_join(hvi_raw, by = "zcta") %>%
+  st_transform(st_crs(cd_boundaries)) %>%
+  st_join(
+    cd_boundaries %>% select(boro_cd),
+    join = st_intersects,
+    left = FALSE
+  ) %>%
+  st_drop_geometry() %>%
+  group_by(boro_cd) %>%
+  summarise(
+    hvi = mean(hvi, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# ── 3. Save cleaned file ─────────────────────────────────────────────
+write_csv(hvi_cd, "clean_data/hvi_cd_clean.csv")
+```
+
+```{r}
+names(hvi_raw)
+```
+
+
+```{r}
+poverty_raw <- read_csv("data/Neighborhood_poverty.csv")
+crosswalk   <- read_csv("data/2020_Census_Tracts_to_2020_NTAs_and_CDTAs_Equivalency_20260314.csv")
+
+# ── 2. Clean, join and summarise in one pipeline ─────────────────────
+poverty_cd_summary <- poverty_raw %>%
+  clean_names() %>%
+  select(time_period, geo_type, geo_id, geography, number, percent) %>%
+  rename(
+    district_name = geography,
+    poverty_rate  = percent,
+    poverty_count = number
+  ) %>%
+  mutate(
+    poverty_count = parse_number(as.character(poverty_count)),
+    poverty_rate  = as.numeric(poverty_rate)
+  ) %>%
+  filter(geo_type == "NTA2020") %>%
+  left_join(
+    crosswalk %>%
+      clean_names() %>%
+      select(nta_code, nta_name, cdta_code, cdta_name, boro_name) %>%
+      distinct(nta_code, .keep_all = TRUE),
+    by = c("district_name" = "nta_name")
+  ) %>%
+  mutate(
+    boro_cd = case_when(
+      str_starts(cdta_code, "MN") ~ paste0("1", str_sub(cdta_code, 3, 4)),
+      str_starts(cdta_code, "BX") ~ paste0("2", str_sub(cdta_code, 3, 4)),
+      str_starts(cdta_code, "BK") ~ paste0("3", str_sub(cdta_code, 3, 4)),
+      str_starts(cdta_code, "QN") ~ paste0("4", str_sub(cdta_code, 3, 4)),
+      str_starts(cdta_code, "SI") ~ paste0("5", str_sub(cdta_code, 3, 4)),
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  group_by(boro_cd, cdta_name, boro_name, time_period) %>%
+  summarise(
+    poverty_count = sum(poverty_count, na.rm = TRUE),
+    poverty_rate  = mean(poverty_rate, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# ── 3. Inspect ───────────────────────────────────────────────────────
+glimpse(poverty_cd_summary)
+
+# ── 4. Export (one file only) ────────────────────────────────────────
+write_csv(poverty_cd_summary, "clean_data/poverty_cleaned.csv")
+```
+
+
+
+```{r}
+read_csv("clean_data/hvi_cd_clean.csv") %>% colnames()
+read_csv("clean_data/demographics_cd_clean.csv") %>% colnames()
+read_csv("clean_data/park_with_cd.csv") %>% colnames()
+read_csv("clean_data/poverty_cleaned.csv") %>% colnames()
+```
+```{r}
+cd_boundaries %>%
+  mutate(
+    borough = case_when(
+      str_starts(boro_cd, "1") ~ "Manhattan",
+      str_starts(boro_cd, "2") ~ "Bronx",
+      str_starts(boro_cd, "3") ~ "Brooklyn",
+      str_starts(boro_cd, "4") ~ "Queens",
+      str_starts(boro_cd, "5") ~ "Staten Island"
+    )
+  ) %>%
+  ggplot() +
+  geom_sf(aes(fill = borough), color = "white", linewidth = 0.2) +
+  geom_sf_text(aes(label = boro_cd), size = 2) +
+  labs(title = "NYC Community District Map (boro_cd)") +
+  theme_minimal()
+
+# check boundary columns
+names(cd_boundaries)
+
+# =========================================================
+# 2. READ CLEANED DATASETS
+# =========================================================
+hvi_cd <- read_csv("clean_data/hvi_cd_clean.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+demographics_cd <- read_csv("clean_data/demographics_cd_clean.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+park_cd <- read_csv("clean_data/park_with_cd.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+poverty_cd <- read_csv("clean_data/poverty_cleaned.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+# =========================================================
+# 3. PREPARE UNIQUE boro_cd LIST FOR EACH DATASET
+# =========================================================
+hvi_keys <- hvi_cd %>%
+  distinct(boro_cd) %>%
+  mutate(in_hvi = "Matched")
+
+demographics_keys <- demographics_cd %>%
+  distinct(boro_cd) %>%
+  mutate(in_demo = "Matched")
+
+park_keys <- park_cd %>%
+  distinct(boro_cd) %>%
+  mutate(in_park = "Matched")
+
+poverty_keys <- poverty_cd %>%
+  distinct(boro_cd) %>%
+  mutate(in_poverty = "Matched")
+
+# =========================================================
+# 4. JOIN TO CD BOUNDARIES FOR QA MAPS
+# =========================================================
+map_hvi <- cd_boundaries %>%
+  left_join(hvi_keys, by = "boro_cd") %>%
+  mutate(in_hvi = replace_na(in_hvi, "Missing"))
+
+map_demo <- cd_boundaries %>%
+  left_join(demographics_keys, by = "boro_cd") %>%
+  mutate(in_demo = replace_na(in_demo, "Missing"))
+
+map_park <- cd_boundaries %>%
+  left_join(park_keys, by = "boro_cd") %>%
+  mutate(in_park = replace_na(in_park, "Missing"))
+
+map_poverty <- cd_boundaries %>%
+  left_join(poverty_keys, by = "boro_cd") %>%
+  mutate(in_poverty = replace_na(in_poverty, "Missing"))
+
+# =========================================================
+# 5. PRINT QA TABLES
+# =========================================================
+cat("\n==============================\n")
+cat("QA CHECK: DATASET boro_cd COVERAGE\n")
+cat("==============================\n")
+
+cat("\nCD boundaries unique boro_cd:\n")
+print(cd_boundaries %>% st_drop_geometry() %>% summarise(n_cd = n_distinct(boro_cd)))
+
+cat("\nHVI unique boro_cd:\n")
+print(hvi_cd %>% summarise(n_cd = n_distinct(boro_cd)))
+
+cat("\nDemographics unique boro_cd:\n")
+print(demographics_cd %>% summarise(n_cd = n_distinct(boro_cd)))
+
+cat("\nPark unique boro_cd:\n")
+print(park_cd %>% summarise(n_cd = n_distinct(boro_cd)))
+
+cat("\nPoverty unique boro_cd:\n")
+print(poverty_cd %>% summarise(n_cd = n_distinct(boro_cd)))
+
+cat("\nboro_cd in HVI but not in boundaries:\n")
+print(anti_join(hvi_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = "boro_cd"))
+
+cat("\nboro_cd in Demographics but not in boundaries:\n")
+print(anti_join(demographics_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = "boro_cd"))
+
+cat("\nboro_cd in Park but not in boundaries:\n")
+print(anti_join(park_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = "boro_cd"))
+
+cat("\nboro_cd in Poverty but not in boundaries:\n")
+print(anti_join(poverty_keys, cd_boundaries %>% st_drop_geometry() %>% distinct(boro_cd), by = "boro_cd"))
+
+# =========================================================
+# 6. CREATE QA MAPS
+# =========================================================
+p_hvi <- ggplot(map_hvi) +
+  geom_sf(aes(fill = in_hvi), color = "white", linewidth = 0.2) +
+  labs(
+    title = "QA Map: HVI boro_cd Coverage",
+    fill = "HVI"
+  ) +
+  theme_minimal()
+
+p_demo <- ggplot(map_demo) +
+  geom_sf(aes(fill = in_demo), color = "white", linewidth = 0.2) +
+  labs(
+    title = "QA Map: Demographics boro_cd Coverage",
+    fill = "Demographics"
+  ) +
+  theme_minimal()
+
+p_park <- ggplot(map_park) +
+  geom_sf(aes(fill = in_park), color = "white", linewidth = 0.2) +
+  labs(
+    title = "QA Map: Park boro_cd Coverage",
+    fill = "Park"
+  ) +
+  theme_minimal()
+
+p_poverty <- ggplot(map_poverty) +
+  geom_sf(aes(fill = in_poverty), color = "white", linewidth = 0.2) +
+  labs(
+    title = "QA Map: Poverty boro_cd Coverage",
+    fill = "Poverty"
+  ) +
+  theme_minimal()
+
+print(p_hvi)
+print(p_demo)
+print(p_park)
+print(p_poverty)
+```
+
+```{r}
+# master table creation
+hvi_cd <- read_csv("clean_data/hvi_cd_clean.csv", show_col_types = FALSE) %>%
+  clean_names() %>% 
+  mutate(boro_cd = as.character(boro_cd))
+
+demographics_cd <- read_csv("clean_data/demographics_cd_clean.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+park_cd <- read_csv("clean_data/park_with_cd.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+poverty_cd <- read_csv("clean_data/poverty_cleaned.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(boro_cd = as.character(boro_cd))
+
+park_summary <- park_cd %>%
+  mutate(acres = suppressWarnings(as.numeric(acres))) %>%
+  group_by(boro_cd) %>%
+  summarise(park_acres = sum(acres, na.rm = TRUE), .groups = "drop")
+
+poverty_latest <- poverty_cd %>%
+  group_by(boro_cd) %>%
+  filter(time_period == max(time_period)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(boro_cd, poverty_rate)
+
+demo_select <- demographics_cd %>%
+  select(
+    boro_cd,
+    district_name,
+    population_2010,
+    pct_white_nonhisp_2010,
+    pct_black_nonhisp_2010,
+    pct_asian_pi_nonhisp_2010,
+    pct_hispanic_2010,
+    pct_nonwhite_2010
+  )
+
+cd_geo <- cd_boundaries %>%
+  select(boro_cd, geometry) %>%
+  mutate(geometry_wkt = st_as_text(geometry)) %>%
+  st_drop_geometry()
+
+master <- demo_select %>%
+  left_join(park_summary, by = "boro_cd") %>%
+  left_join(poverty_latest, by = "boro_cd") %>%
+  left_join(hvi_cd %>% select(boro_cd, hvi), by = "boro_cd") %>%
+  left_join(cd_geo, by = "boro_cd")
+
+master <- master %>%
+  mutate(
+    park_acres_per_capita = park_acres / population
+  )
+# ============================================================
+# Park access:  43.75%  (35/80 re-normalized)
+# Poverty:      25.00%  (20/80 re-normalized)
+# HVI:          31.25%  (20/80 re-normalized)
+# ============================================================
+
+# ── 1. Min-max normalization helper ─────────────────────────
+minmax <- function(x) {
+  (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+}
+
+master <- master %>%
+  mutate(
+    # Normalize each indicator to 0–1
+    # Park access is INVERTED: less park = higher priority
+    park_norm    = 1 - minmax(park_acres_per_capita),
+    poverty_norm = minmax(poverty_rate),
+    hvi_norm     = minmax(hvi),
+
+    # Weighted overall score (0–1 scale)
+    overall_score = (park_norm    * 0.4375) +
+                    (poverty_norm * 0.2500) +
+                    (hvi_norm     * 0.3125)
+  )
+
+# ── 2. Auto-split into 4 equal bands (quartiles of overall_score) ──
+score_breaks <- quantile(master$overall_score, probs = c(0, 0.25, 0.50, 0.75, 1.0), na.rm = TRUE)
+
+master <- master %>%
+  mutate(
+    priority_tier = case_when(
+      overall_score <= score_breaks[2] ~ "Lower priority",
+      overall_score <= score_breaks[3] ~ "Moderate priority",
+      overall_score <= score_breaks[4] ~ "High priority",
+      TRUE                             ~ "Very high priority"
+    )
+  )
+
+# ── 3. Check the cutoffs ─────────────────────────────────────
+cat("Score quartile cutoffs:\n")
+print(round(score_breaks, 4))
+cat("\nPriority tier counts:\n")
+print(table(master$priority_tier))
+
+# ── 4. Select & export final columns ────────────────────────
+master_final <- master %>%
+  filter(as.integer(boro_cd) %in% c(101:112, 201:212, 301:318, 401:414, 501:503)) %>%
+  select(
+    boro_cd,
+    district_name,
+    geometry_wkt,
+    park_acres,
+    population          = population_2010,
+    park_acres_per_capita,
+    poverty_rate,
+    pct_white_nonhisp   = pct_white_nonhisp_2010,
+    pct_black_nonhisp   = pct_black_nonhisp_2010,
+    pct_asian_pi_nonhisp = pct_asian_pi_nonhisp_2010,
+    pct_hispanic        = pct_hispanic_2010,
+    pct_nonwhite        = pct_nonwhite_2010,
+    hvi,
+    park_norm,
+    poverty_norm,
+    hvi_norm,
+    overall_score,
+    priority_tier
+  ) %>%
+  arrange(boro_cd)
+
+dir.create("clean_data", recursive = TRUE, showWarnings = FALSE)
+write_csv(master_final, "clean_data/master_cd.csv")
+
+cat("\n✓ master_cd.csv written —", nrow(master_final), "rows,", ncol(master_final), "columns\n")
+```
+
+```{r}
+
+# ============================================================
+# install.packages(c("shiny","leaflet","sf","tidyverse",
+#                    "janitor","plotly","htmltools","scales"))
+
+library(shiny)
+library(leaflet)
+library(plotly)
+library(htmltools)
+library(scales)
+
+# ============================================================
+# 1. LOAD & PREPARE DATA
+# ============================================================
+
+master_raw <- read_csv("clean_data/master_cd.csv", show_col_types = FALSE) %>%
+  clean_names()
+
+valid_boro_cds <- c(101:112, 201:212, 301:318, 401:414, 501:503)
+
+master <- master_raw %>%
+  filter(boro_cd %in% valid_boro_cds) %>%
+  mutate(
+    short_name = district_name %>%
+      str_replace("Manhattan Community District", "MN CD") %>%
+      str_replace("Bronx Community District",     "BX CD") %>%
+      str_replace("Brooklyn Community District",  "BK CD") %>%
+      str_replace("Queens Community District",    "QN CD") %>%
+      str_replace("Staten Island Community District", "SI CD"),
+
+    borough = case_when(
+      str_starts(as.character(boro_cd), "1") ~ "Manhattan",
+      str_starts(as.character(boro_cd), "2") ~ "Bronx",
+      str_starts(as.character(boro_cd), "3") ~ "Brooklyn",
+      str_starts(as.character(boro_cd), "4") ~ "Queens",
+      str_starts(as.character(boro_cd), "5") ~ "Staten Island"
+    ),
+
+    priority_tier = factor(priority_tier,
+      levels = c("Very high priority","High priority",
+                 "Moderate priority","Lower priority")),
+
+    park_norm    = (max(park_acres_per_capita, na.rm=TRUE) - park_acres_per_capita) /
+                   (max(park_acres_per_capita, na.rm=TRUE) - min(park_acres_per_capita, na.rm=TRUE)),
+    poverty_norm = (poverty_rate - min(poverty_rate, na.rm=TRUE)) /
+                   (max(poverty_rate, na.rm=TRUE) - min(poverty_rate, na.rm=TRUE)),
+    hvi_norm     = (hvi - min(hvi, na.rm=TRUE)) /
+                   (max(hvi, na.rm=TRUE) - min(hvi, na.rm=TRUE)),
+
+    park_rank_asc  = rank(park_acres_per_capita,  na.last = "keep"),
+    park_rank_desc = rank(-park_acres_per_capita, na.last = "keep"),
+
+    # Ensure rank columns exist (use CSV values if present, else compute)
+    park_rank    = if ("park_rank"    %in% names(.)) as.integer(park_rank)    else ntile(desc(park_acres_per_capita), 4),
+    poverty_rank = if ("poverty_rank" %in% names(.)) as.integer(poverty_rank) else ntile(poverty_rate, 4),
+    hvi_rank     = if ("hvi_rank"     %in% names(.)) as.integer(hvi_rank)     else ntile(hvi, 4)
+  )
+
+master_sf <- master %>%
+  st_as_sf(wkt = "geometry_wkt", crs = 4326)
+
+nyc_avg_park    <- mean(master$park_acres_per_capita, na.rm=TRUE)
+nyc_avg_poverty <- mean(master$poverty_rate, na.rm=TRUE)
+nyc_avg_hvi     <- mean(master$hvi, na.rm=TRUE)
+n_districts     <- nrow(master)
+
+# ============================================================
+# 2. COLOUR PALETTES
+# ============================================================
+
+tier_colors <- c(
+  "Very high priority" = "#dc2626",
+  "High priority"      = "#ea580c",
+  "Moderate priority"  = "#ca8a04",
+  "Lower priority"     = "#16a34a"
+)
+
+tier_pal <- colorFactor(
+  palette  = unname(tier_colors),
+  levels   = names(tier_colors),
+  na.color = "#d1d5db"
+)
+
+park_pal <- colorNumeric(
+  palette  = c("#dc2626","#f97316","#fbbf24","#86efac","#16a34a","#14532d"),
+  domain   = master$park_acres_per_capita,
+  na.color = "#d1d5db"
+)
+
+hvi_pal <- colorNumeric(
+  palette  = c("#fef9c3","#fde047","#f97316","#dc2626","#7f1d1d"),
+  domain   = master$hvi,
+  na.color = "#d1d5db"
+)
+
+# ============================================================
+# 3. CSS
+# ============================================================
+
+app_css <- "
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --white:    #ffffff;
+  --off:      #f8faf8;
+  --surface:  #f0f7f0;
+  --border:   #d1e8d1;
+  --green:    #16a34a;
+  --green-d:  #14532d;
+  --green-l:  #86efac;
+  --green-xl: #dcfce7;
+  --text:     #111827;
+  --muted:    #6b7280;
+  --red:      #dc2626;
+  --orange:   #ea580c;
+  --yellow:   #ca8a04;
+  --blue:     #2563eb;
+  --purple:   #7c3aed;
+  --shadow:   0 1px 4px rgba(0,0,0,0.08);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.10);
+  --radius:   10px;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body {
+  font-family:'Inter',sans-serif;
+  background:var(--off);
+  color:var(--text);
+  overflow-x:hidden;
+}
+.container-fluid { padding:0 !important; }
+
+/* ── TOP NAV ── */
+.top-nav {
+  position:sticky; top:0; z-index:500;
+  background:var(--white);
+  border-bottom:2px solid var(--border);
+  display:flex; align-items:center;
+  padding:0 24px; height:56px;
+  box-shadow:var(--shadow);
+}
+.nav-brand {
+  font-family:'Playfair Display',serif;
+  font-size:17px; color:var(--green-d);
+  margin-right:28px; white-space:nowrap; flex-shrink:0;
+}
+.nav-brand span { color:var(--green); }
+.nav-links { display:flex; gap:4px; flex:1; }
+.nav-link {
+  font-size:12px; font-weight:500; color:var(--muted);
+  text-decoration:none; padding:6px 12px;
+  border-radius:20px; transition:all 0.15s; white-space:nowrap;
+  cursor:pointer; border:none; background:none; font-family:'Inter',sans-serif;
+}
+.nav-link:hover { background:var(--green-xl); color:var(--green-d); }
+.nav-link.active { background:var(--green); color:var(--white); }
+.nav-spacer { flex:1; }
+.compare-nav-btn {
+  background:var(--green-d); color:var(--white);
+  border:none; border-radius:20px; padding:7px 16px;
+  font-family:'Inter',sans-serif; font-size:12px; font-weight:600;
+  cursor:pointer; transition:opacity 0.15s; white-space:nowrap;
+}
+.compare-nav-btn:hover { opacity:0.85; }
+
+/* ── HERO ── */
+.hero {
+  background:linear-gradient(135deg, var(--green-d) 0%, var(--green) 60%, #4ade80 100%);
+  padding:48px 32px 40px;
+  display:flex; align-items:flex-start; gap:40px;
+  min-height:320px;
+}
+.hero-left { flex:1; max-width:380px; }
+.hero-title {
+  font-family:'Playfair Display',serif;
+  font-size:32px; color:var(--white);
+  line-height:1.25; margin-bottom:10px;
+}
+.hero-sub {
+  font-size:14px; color:rgba(255,255,255,0.85);
+  line-height:1.7; margin-bottom:24px;
+}
+.hero-search-wrap {
+  background:var(--white); border-radius:var(--radius);
+  padding:16px; box-shadow:var(--shadow-md);
+}
+.hero-search-lbl {
+  font-size:11px; font-weight:600; text-transform:uppercase;
+  letter-spacing:0.08em; color:var(--muted); margin-bottom:8px;
+}
+.hero-or {
+  text-align:center; font-size:11px; color:var(--muted);
+  margin:10px 0; position:relative;
+}
+.hero-or::before, .hero-or::after {
+  content:''; position:absolute; top:50%;
+  width:35%; height:1px; background:var(--border);
+}
+.hero-or::before { left:0; }
+.hero-or::after  { right:0; }
+.hero-hint { font-size:11px; color:var(--muted); text-align:center; }
+
+.hero-map-wrap { flex:1; border-radius:var(--radius); overflow:hidden;
+  box-shadow:var(--shadow-md); min-height:260px; }
+
+/* ── DISTRICT PROFILE CARD ── */
+.profile-card {
+  background:var(--white); border-radius:var(--radius);
+  border:1px solid var(--border); padding:16px;
+  box-shadow:var(--shadow); margin-top:12px;
+}
+.profile-name {
+  font-family:'Playfair Display',serif;
+  font-size:16px; color:var(--green-d); margin-bottom:4px;
+}
+.profile-tier {
+  display:inline-block; font-size:11px; font-weight:600;
+  padding:2px 10px; border-radius:10px; margin-bottom:12px;
+}
+.profile-metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.pm {
+  background:var(--surface); border-radius:6px;
+  padding:8px 10px; border:1px solid var(--border);
+}
+.pm-label { font-size:10px; color:var(--muted); margin-bottom:2px; font-weight:500; }
+.pm-value { font-size:16px; font-weight:700; color:var(--text); }
+.pm-avg   { font-size:10px; color:var(--muted); margin-top:2px; }
+.pm-bar   { height:3px; background:var(--border); border-radius:2px; margin-top:4px; overflow:hidden; }
+.pm-fill  { height:100%; border-radius:2px; }
+.vs-good  { color:var(--green); font-weight:600; }
+.vs-bad   { color:var(--red);   font-weight:600; }
+
+/* ── SECTIONS ── */
+.dash-section {
+  padding:40px 32px;
+  border-bottom:1px solid var(--border);
+}
+.dash-section:nth-child(even) { background:var(--off); }
+.dash-section:nth-child(odd)  { background:var(--white); }
+
+.section-rq {
+  display:inline-block; font-size:11px; font-weight:600;
+  text-transform:uppercase; letter-spacing:0.1em;
+  color:var(--green); margin-bottom:6px;
+}
+.section-title {
+  font-family:'Playfair Display',serif;
+  font-size:24px; color:var(--green-d); margin-bottom:6px;
+}
+.section-sub { font-size:14px; color:var(--muted); margin-bottom:24px; line-height:1.6; }
+
+/* ── INSIGHT CALLOUT ── */
+.insight {
+  background:var(--green-xl); border-left:4px solid var(--green);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:12px 16px; margin-bottom:20px; font-size:13px;
+  color:var(--green-d); line-height:1.6;
+}
+.insight strong { font-weight:700; }
+
+/* ── LAYOUT HELPERS ── */
+.two-col { display:flex; gap:20px; }
+.col-left  { flex-shrink:0; }
+.col-right { flex:1; }
+.card {
+  background:var(--white); border-radius:var(--radius);
+  border:1px solid var(--border); box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.card-hd {
+  padding:12px 16px; border-bottom:1px solid var(--border);
+  font-size:12px; font-weight:600; color:var(--green-d);
+  background:var(--surface);
+}
+.card-body { padding:10px; }
+.map-card { height:420px; }
+.map-card .leaflet-container { background:#e8f5e9 !important; }
+
+/* ── RANK LIST ── */
+.rank-list { padding:4px 0; }
+.rank-row {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 12px; cursor:pointer;
+  transition:background 0.12s; border-radius:6px; margin:1px 4px;
+}
+.rank-row:hover, .rank-row.sel { background:var(--green-xl); }
+.rank-num { font-size:11px; color:var(--muted); width:18px; text-align:right; flex-shrink:0; }
+.rank-name { font-size:12px; color:var(--muted); flex:1;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rank-row.sel .rank-name, .rank-row:hover .rank-name { color:var(--green-d); font-weight:500; }
+.rank-val { font-size:11px; font-weight:600; flex-shrink:0; }
+
+/* ── TIER CHIPS ── */
+.tier-chip {
+  display:inline-block; font-size:10px; font-weight:600;
+  padding:3px 10px; border-radius:10px; border:1px solid;
+  cursor:pointer; margin:2px; transition:all 0.12s;
+}
+.chip-vh { color:var(--red);    border-color:var(--red);    background:rgba(220,38,38,0.07); }
+.chip-hi { color:var(--orange); border-color:var(--orange); background:rgba(234,88,12,0.07); }
+.chip-mo { color:var(--yellow); border-color:var(--yellow); background:rgba(202,138,4,0.07); }
+.chip-lo { color:var(--green);  border-color:var(--green);  background:rgba(22,163,74,0.07); }
+.tier-chip.off { opacity:0.35; }
+
+/* ── SCORE BREAKDOWN ── */
+.breakdown { margin-top:8px; }
+.bd-row { margin-bottom:8px; }
+.bd-hd  { display:flex; justify-content:space-between; margin-bottom:3px; }
+.bd-lbl { font-size:11px; color:var(--muted); }
+.bd-val { font-size:11px; font-weight:700; color:var(--text); }
+.bd-track { height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+.bd-fill  { height:100%; border-radius:4px; transition:width 0.5s; }
+
+/* ── SLIDERS ── */
+.irs--shiny .irs-bar    { background:var(--green) !important; border-color:var(--green) !important; }
+.irs--shiny .irs-handle { background:var(--green) !important; border-color:var(--green) !important; }
+.irs--shiny .irs-single { background:var(--green) !important; color:#fff !important; font-size:10px !important; }
+.irs--shiny .irs-line   { background:var(--border) !important; }
+.slider-lbl {
+  font-size:10px; font-weight:600; text-transform:uppercase;
+  letter-spacing:0.06em; color:var(--muted); margin-bottom:2px;
+}
+
+/* ── SELECTIZE ── */
+.selectize-input {
+  background:var(--white) !important; border-color:var(--border) !important;
+  color:var(--text) !important; font-size:13px !important;
+  font-family:'Inter',sans-serif !important; border-radius:8px !important;
+  box-shadow:var(--shadow) !important;
+}
+.selectize-input.focus { border-color:var(--green) !important; box-shadow:0 0 0 3px rgba(22,163,74,0.12) !important; }
+.selectize-dropdown { border-color:var(--border) !important; border-radius:8px !important;
+  box-shadow:var(--shadow-md) !important; }
+.selectize-dropdown-content .option { color:var(--text) !important; font-size:13px !important; }
+.selectize-dropdown-content .option:hover,
+.selectize-dropdown-content .active { background:var(--green-xl) !important; color:var(--green-d) !important; }
+
+/* ── COMPARE MODAL ── */
+#compareModal {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.35); z-index:9000;
+  align-items:center; justify-content:center;
+}
+#compareModal.show { display:flex; }
+.modal-card {
+  background:var(--white); border-radius:16px;
+  padding:28px 32px; width:680px; max-width:95vw;
+  box-shadow:0 20px 60px rgba(0,0,0,0.2);
+  animation:popIn 0.2s ease;
+  max-height:90vh; overflow-y:auto;
+}
+@keyframes popIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
+.modal-title {
+  font-family:'Playfair Display',serif; font-size:20px;
+  color:var(--green-d); margin-bottom:4px;
+}
+.modal-sub { font-size:13px; color:var(--muted); margin-bottom:20px; }
+.modal-selects { display:flex; gap:12px; margin-bottom:20px; }
+.modal-selects > div { flex:1; }
+.compare-table { width:100%; border-collapse:collapse; font-size:13px; }
+.compare-table th {
+  background:var(--surface); padding:10px 14px;
+  text-align:left; font-size:11px; font-weight:600;
+  text-transform:uppercase; letter-spacing:0.06em; color:var(--muted);
+  border-bottom:2px solid var(--border);
+}
+.compare-table td { padding:10px 14px; border-bottom:1px solid var(--border); }
+.compare-table tr:hover td { background:var(--green-xl); }
+.compare-table .metric-col { color:var(--muted); font-weight:500; }
+.compare-table .better { color:var(--green); font-weight:700; }
+.compare-table .worse  { color:var(--red);   font-weight:700; }
+.modal-close {
+  float:right; background:none; border:none; font-size:20px;
+  cursor:pointer; color:var(--muted); margin-top:-4px;
+  transition:color 0.15s; line-height:1;
+}
+.modal-close:hover { color:var(--red); }
+
+/* ── LEAFLET TOOLTIP ── */
+.park-tt {
+  background:var(--white) !important; border:1px solid var(--border) !important;
+  border-radius:8px !important; color:var(--text) !important;
+  font-family:'Inter',sans-serif !important; font-size:12px !important;
+  box-shadow:var(--shadow-md) !important; padding:0 !important;
+}
+.park-tt::before { display:none !important; }
+.tt-hd { padding:8px 12px 6px; border-bottom:1px solid var(--border);
+  font-weight:600; font-size:12px; color:var(--green-d); }
+.tt-bd { padding:6px 12px 8px; }
+.tt-r  { display:flex; justify-content:space-between; gap:16px;
+  margin-bottom:2px; font-size:11px; }
+.tt-k  { color:var(--muted); }
+.tt-v  { font-weight:600; }
+.leaflet-control-zoom a {
+  background:var(--white) !important; color:var(--green-d) !important;
+  border-color:var(--border) !important; font-weight:700 !important;
+}
+.leaflet-control-zoom a:hover { background:var(--green-xl) !important; }
+
+/* ── FOOTER ── */
+.dash-footer {
+  background:var(--green-d); color:rgba(255,255,255,0.7);
+  text-align:center; padding:24px; font-size:12px;
+}
+.dash-footer strong { color:var(--white); }
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px) {
+  .hero { flex-direction:column; }
+  .two-col { flex-direction:column; }
+  .profile-metrics { grid-template-columns:1fr; }
+  .modal-selects { flex-direction:column; }
+}
+"
+
+# ============================================================
+# 4. HELPER: tooltip HTML
+# ============================================================
+
+make_tt <- function(d) {
+  park_str <- if (!is.na(d$park_acres_per_capita))
+    paste0(round(d$park_acres_per_capita*1000,2)," ac/1k") else "N/A"
+  pov_str  <- if (!is.na(d$poverty_rate))  paste0(round(d$poverty_rate,1),"%") else "N/A"
+  hvi_str  <- if (!is.na(d$hvi))           round(d$hvi,2) else "N/A"
+  tier_col <- tier_colors[as.character(d$priority_tier)]
+  HTML(paste0(
+    "<div class='tt-hd'>",d$district_name,"</div>",
+    "<div class='tt-bd'>",
+    "<div class='tt-r'><span class='tt-k'>Priority</span>",
+    "<span style='color:",tier_col,";font-weight:700'>",d$priority_tier,"</span></div>",
+    "<div class='tt-r'><span class='tt-k'>Score</span>",
+    "<span class='tt-v'>",d$overall_score,"/12</span></div>",
+    "<div class='tt-r'><span class='tt-k'>Park access</span>",
+    "<span class='tt-v'>",park_str,"</span></div>",
+    "<div class='tt-r'><span class='tt-k'>Poverty rate</span>",
+    "<span class='tt-v'>",pov_str,"</span></div>",
+    "<div class='tt-r'><span class='tt-k'>HVI</span>",
+    "<span class='tt-v'>",hvi_str,"</span></div>",
+    "</div>"
+  ))
+}
+
+lbl_opts <- labelOptions(
+  style     = list("background"="transparent","border"="none",
+                   "box-shadow"="none","padding"="0"),
+  sticky    = TRUE, textOnly = FALSE,
+  className = "park-tt"
+)
+
+# ============================================================
+# 5. UI
+# ============================================================
+
+ui <- fluidPage(
+  title = "NYC Park Equity Explorer",
+  tags$head(
+    tags$style(HTML(app_css)),
+    tags$script(HTML("
+      // Compare modal
+      function openCompare() {
+        document.getElementById('compareModal').classList.add('show');
+      }
+      function closeCompare() {
+        document.getElementById('compareModal').classList.remove('show');
+      }
+      document.addEventListener('keydown', function(e){
+        if(e.key==='Escape') closeCompare();
+      });
+
+      // Smooth scroll nav
+      function scrollTo(id) {
+        document.getElementById(id).scrollIntoView({behavior:'smooth'});
+        document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
+        event.target.classList.add('active');
+      }
+
+      // Highlight active nav on scroll
+      window.addEventListener('scroll', function(){
+        const sections = ['sec-hero','sec-park','sec-inequality','sec-heat','sec-priority'];
+        let current = 'sec-hero';
+        sections.forEach(id => {
+          const el = document.getElementById(id);
+          if(el && el.getBoundingClientRect().top < 120) current = id;
+        });
+        document.querySelectorAll('.nav-link').forEach(l => {
+          l.classList.toggle('active', l.dataset.sec === current);
+        });
+      });
+    "))
+  ),
+
+  # ── TOP NAV ────────────────────────────────────────────────
+  div(class="top-nav",
+    div(class="nav-brand", "NYC Park Equity ", tags$span("Explorer")),
+    div(class="nav-links",
+      tags$button(class="nav-link active", `data-sec`="sec-hero",
+        onclick="scrollTo('sec-hero')", "Find Your District"),
+      tags$button(class="nav-link", `data-sec`="sec-park",
+        onclick="scrollTo('sec-park')", "Park Access"),
+      tags$button(class="nav-link", `data-sec`="sec-inequality",
+        onclick="scrollTo('sec-inequality')", "Inequality"),
+      tags$button(class="nav-link", `data-sec`="sec-heat",
+        onclick="scrollTo('sec-heat')", "Heat Risk"),
+      tags$button(class="nav-link", `data-sec`="sec-priority",
+        onclick="scrollTo('sec-priority')", "Priority Planning")
+    ),
+    div(class="nav-spacer"),
+    tags$button(class="compare-nav-btn", onclick="openCompare()", "⇄ Compare Districts")
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # SECTION 1 — HERO / FIND YOUR DISTRICT
+  # ════════════════════════════════════════════════════════════
+  div(id="sec-hero", class="hero",
+
+    # Left: search + profile
+    div(class="hero-left",
+      div(class="hero-title", "How green is your neighborhood?"),
+      div(class="hero-sub",
+        "Explore park access, poverty, and heat vulnerability across NYC's 59 community districts. Find your district to see how it compares."),
+
+      div(class="hero-search-wrap",
+        div(class="hero-search-lbl", "Find Your District"),
+        selectizeInput("hero_search", NULL,
+          choices  = setNames(master$boro_cd, master$district_name),
+          selected = NULL,
+          options  = list(placeholder="Search district name...",
+                          allowEmptyOption=TRUE)
+        ),
+        div(class="hero-or", "or"),
+        div(class="hero-hint", "Click any district on the map →"),
+
+        # Profile card (shown after selection)
+        uiOutput("hero_profile")
+      )
+    ),
+
+    # Right: hero map
+    div(class="hero-map-wrap",
+      leafletOutput("map_hero", width="100%", height="320px")
+    )
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # SECTION 2 — PARK ACCESS
+  # ════════════════════════════════════════════════════════════
+  div(id="sec-park", class="dash-section",
+    div(class="section-rq", "Research Question 1"),
+    div(class="section-title", "Park Access Across NYC"),
+    div(class="section-sub",
+      "How does access to public green space vary across NYC community districts?"),
+
+    div(class="insight",
+      tags$strong("Key finding: "),
+      "Bronx community districts have some of the lowest park access in NYC,",
+      " with many districts offering less than 0.5 acres per 1,000 residents —",
+      " far below the citywide average of ",
+      round(nyc_avg_park*1000, 2), " ac/1k."
+    ),
+
+    div(class="two-col",
+      # Left: rank list
+      div(class="col-left",
+        div(class="card", style="width:220px",
+          div(class="card-hd", "Lowest Park Access"),
+          div(class="card-body rank-list", uiOutput("park_rank_ui"))
+        )
+      ),
+      # Right: map
+      div(class="col-right",
+        div(class="card map-card",
+          div(class="card-hd", "Park Acres per 1,000 Residents"),
+          leafletOutput("map_park", width="100%", height="380px")
+        )
+      )
+    )
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # SECTION 3 — INEQUALITY
+  # ════════════════════════════════════════════════════════════
+  div(id="sec-inequality", class="dash-section",
+    div(class="section-rq", "Research Question 2"),
+    div(class="section-title", "Social & Economic Inequality"),
+    div(class="section-sub",
+      "How do racial and economic vulnerability patterns differ across districts with lower park access?"),
+
+    div(class="insight",
+      tags$strong("Key finding: "),
+      "Districts in the bottom quartile of park access have an average poverty rate of ",
+      round(mean(master$poverty_rate[master$park_rank_asc <= 15], na.rm=TRUE),1),
+      "% — nearly double the citywide average. Communities of color are",
+      " disproportionately concentrated in low-park districts."
+    ),
+
+    div(class="two-col",
+      div(class="col-left",
+        div(class="card", style="width:200px",
+          div(class="card-hd", "Filters"),
+          div(class="card-body",
+            div(class="slider-lbl", "Min Poverty (%)"),
+            sliderInput("s3_pov", NULL, min=0, max=45, value=0, step=1, width="100%"),
+            div(class="slider-lbl", "Min % Non-white"),
+            sliderInput("s3_nw",  NULL, min=0, max=100, value=0, step=5, width="100%"),
+            div(class="slider-lbl", "Borough"),
+            checkboxGroupInput("s3_boro", NULL,
+              choices  = c("Manhattan","Bronx","Brooklyn","Queens","Staten Island"),
+              selected = c("Manhattan","Bronx","Brooklyn","Queens","Staten Island")
+            ),
+            div(style="font-size:11px;color:var(--muted);margin-top:4px",
+              textOutput("s3_count"))
+          )
+        )
+      ),
+      div(class="col-right",
+        div(class="card",
+          div(class="card-hd",
+            "Park Access vs Poverty Rate  ·  ",
+            tags$span(style="font-weight:400;color:var(--muted)",
+              "color = % non-white, size = population")),
+          plotlyOutput("scatter_ineq", width="100%", height="380px")
+        )
+      )
+    )
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # SECTION 4 — HEAT RISK
+  # ════════════════════════════════════════════════════════════
+  div(id="sec-heat", class="dash-section",
+    div(class="section-rq", "Research Question 3"),
+    div(class="section-title", "Heat Vulnerability & Green Space"),
+    div(class="section-sub",
+      "How do districts with lower park access compare in terms of heat vulnerability?"),
+
+    div(class="insight",
+      tags$strong("Key finding: "),
+      "Districts with less than 1 acre of park per 1,000 residents have an average",
+      " Heat Vulnerability Index of ",
+      round(mean(master$hvi[master$park_acres_per_capita < 0.001], na.rm=TRUE),2),
+      " — significantly above the NYC average of ", round(nyc_avg_hvi,2), ".",
+      " Low green space and high heat risk converge in the same communities."
+    ),
+
+    div(class="two-col",
+      # Left: scatter
+      div(class="col-right",
+        div(class="card",
+          div(class="card-hd",
+            "Park Access vs Heat Vulnerability Index"),
+          plotlyOutput("scatter_heat", width="100%", height="380px")
+        )
+      ),
+      # Right: HVI map
+      div(class="col-left",
+        div(class="card map-card", style="width:340px",
+          div(class="card-hd", "Heat Vulnerability Index by District"),
+          leafletOutput("map_hvi", width="100%", height="380px")
+        )
+      )
+    )
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # SECTION 5 — PRIORITY PLANNING
+  # ════════════════════════════════════════════════════════════
+  div(id="sec-priority", class="dash-section",
+    div(class="section-rq", "Research Question 4"),
+    div(class="section-title", "Priority Areas for Planning"),
+    div(class="section-sub",
+      "Which districts should be prioritized for new green infrastructure investment?"),
+
+    div(class="insight",
+      tags$strong("Key finding: "),
+      "16 districts score Very High priority, concentrated in the Bronx and Central Brooklyn.",
+      " These areas combine the worst park access, highest poverty rates,",
+      " and greatest heat vulnerability in NYC."
+    ),
+
+    div(class="two-col",
+
+      # Left: top list + chips + simulator
+      div(class="col-left",
+        # Tier filter chips
+        div(style="margin-bottom:12px",
+          div(style="font-size:11px;font-weight:600;color:var(--muted);
+                      margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em",
+            "Filter by tier"),
+          div(id="tierChips",
+            tags$span(class="tier-chip chip-vh", id="chip_vh",
+              onclick="toggleChip(this,'vh')", "Very High"),
+            tags$span(class="tier-chip chip-hi", id="chip_hi",
+              onclick="toggleChip(this,'hi')", "High"),
+            tags$span(class="tier-chip chip-mo", id="chip_mo",
+              onclick="toggleChip(this,'mo')", "Moderate"),
+            tags$span(class="tier-chip chip-lo", id="chip_lo",
+              onclick="toggleChip(this,'lo')", "Lower"),
+            tags$script(HTML("
+              function toggleChip(el, t) {
+                el.classList.toggle('off');
+                const on=[];
+                ['vh','hi','mo','lo'].forEach(x=>{
+                  if(!document.getElementById('chip_'+x).classList.contains('off')) on.push(x);
+                });
+                Shiny.setInputValue('s5_chips', on.join(','), {priority:'event'});
+              }
+            "))
+          )
+        ),
+        div(class="card", style="width:220px",
+          div(class="card-hd", "Top Priority Districts"),
+          div(class="card-body rank-list", uiOutput("priority_rank_ui"))
+        ),
+        # Policy simulator
+        div(class="card", style="width:220px;margin-top:16px",
+          div(class="card-hd", "⚙ Policy Simulator"),
+          div(class="card-body",
+            div(style="font-size:11px;color:var(--muted);margin-bottom:10px",
+              "Adjust weights to recalculate priorities"),
+            div(class="slider-lbl", "Park Access (%)"),
+            sliderInput("w_park",    NULL, min=0, max=100, value=44, step=1, width="100%"),
+            div(class="slider-lbl", "Poverty (%)"),
+            sliderInput("w_poverty", NULL, min=0, max=100, value=25, step=1, width="100%"),
+            div(class="slider-lbl", "Heat/HVI (%)"),
+            sliderInput("w_hvi",     NULL, min=0, max=100, value=31, step=1, width="100%"),
+            uiOutput("sim_check"),
+            actionButton("apply_sim", "Apply Weights",
+              style="width:100%;margin-top:8px;background:var(--green);
+                     color:white;border:none;border-radius:8px;padding:8px;
+                     font-weight:600;font-size:13px;font-family:'Inter',sans-serif;
+                     cursor:pointer")
+          )
+        )
+      ),
+
+      # Right: priority map + detail
+      div(class="col-right",
+        div(class="card map-card",
+          div(class="card-hd", "Priority Tier Map — click a district for score breakdown"),
+          leafletOutput("map_priority", width="100%", height="380px")
+        ),
+        # Detail card below map
+        div(style="margin-top:16px", uiOutput("priority_detail"))
+      )
+    )
+  ),
+
+  # ════════════════════════════════════════════════════════════
+  # COMPARE MODAL
+  # ════════════════════════════════════════════════════════════
+  div(id="compareModal",
+    div(class="modal-card",
+      tags$button(class="modal-close", onclick="closeCompare()", "×"),
+      div(class="modal-title", "Compare Districts"),
+      div(class="modal-sub",  "Select two districts to compare their key indicators side by side."),
+      div(class="modal-selects",
+        div(
+          div(style="font-size:11px;font-weight:600;color:var(--muted);
+                      margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em",
+            "District A"),
+          selectizeInput("cmp_a", NULL,
+            choices  = setNames(master$boro_cd, master$district_name),
+            selected = 101,
+            options  = list(placeholder="Select district A..."))
+        ),
+        div(
+          div(style="font-size:11px;font-weight:600;color:var(--muted);
+                      margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em",
+            "District B"),
+          selectizeInput("cmp_b", NULL,
+            choices  = setNames(master$boro_cd, master$district_name),
+            selected = 205,
+            options  = list(placeholder="Select district B..."))
+        )
+      ),
+      tableOutput("compare_table")
+    ),
+    # Close on backdrop click
+    tags$script(HTML("
+      document.getElementById('compareModal').addEventListener('click', function(e){
+        if(e.target===this) closeCompare();
+      });
+    "))
+  ),
+
+  # ── FOOTER ─────────────────────────────────────────────────
+  div(class="dash-footer",
+    tags$strong("NYC Park Equity Explorer"),
+    " · Data: NYC Open Data, Census 2010, Heat Vulnerability Index",
+    " · Built with R Shiny & Leaflet"
+  )
+)
+
+# ============================================================
+# 6. SERVER
+# ============================================================
+
+server <- function(input, output, session) {
+
+  sel <- reactiveVal(NULL)
+
+  # Sync hero search → selected district
+  observeEvent(input$hero_search, {
+    req(input$hero_search)
+    sel(as.integer(input$hero_search))
+  })
+  observeEvent(input$sel_cd, {
+    sel(as.integer(input$sel_cd))
+    updateSelectizeInput(session, "hero_search", selected=as.character(input$sel_cd))
+  })
+
+  # ── HERO MAP ──────────────────────────────────────────────
+  output$map_hero <- renderLeaflet({
+    leaflet(options=leafletOptions(zoomControl=FALSE)) %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng=-73.95, lat=40.70, zoom=9) %>%
+      addPolygons(
+        data        = master_sf,
+        layerId     = ~boro_cd,
+        fillColor   = ~tier_pal(priority_tier),
+        fillOpacity = 0.6,
+        color       = "#ffffff", weight=1,
+        label       = ~lapply(apply(master_sf,1,function(r) make_tt(as.list(r))),HTML),
+        labelOptions = lbl_opts,
+        highlight   = highlightOptions(weight=2,color='#14532d',
+                        fillOpacity=0.85, bringToFront=TRUE)
+      )
+  })
+
+  observeEvent(input$map_hero_shape_click, {
+    req(input$map_hero_shape_click$id)
+    sel(as.integer(input$map_hero_shape_click$id))
+    updateSelectizeInput(session,"hero_search",
+      selected=as.character(input$map_hero_shape_click$id))
+  })
+
+  # Highlight selected on hero map
+  observe({
+    s <- sel(); req(s)
+    feat <- master_sf %>% filter(boro_cd==s)
+    if (nrow(feat)>0) {
+      bb <- st_bbox(feat)
+      leafletProxy("map_hero") %>%
+        clearGroup("selected") %>%
+        addPolygons(data=feat, group="selected",
+          fillColor="#14532d", fillOpacity=0.85,
+          color="#ffffff", weight=2.5)
+    }
+  })
+
+  # ── HERO PROFILE CARD ────────────────────────────────────
+  output$hero_profile <- renderUI({
+    s <- sel()
+    if (is.null(s)) return(NULL)
+    d <- master %>% filter(boro_cd==s)
+    if (nrow(d)==0) return(NULL)
+    d <- d[1,]
+
+    tc    <- as.character(d$priority_tier)
+    col   <- tier_colors[tc]
+    bg    <- paste0(col,"18")
+
+    fmt <- function(x, digits=1, suf="", mult=1) {
+      if (is.na(x)) "N/A" else paste0(round(x*mult, digits), suf)
+    }
+    vs_park <- if (!is.na(d$park_acres_per_capita)) {
+      diff <- d$park_acres_per_capita - nyc_avg_park
+      cls  <- if (diff >= 0) "vs-good" else "vs-bad"
+      sign <- if (diff >= 0) "+" else ""
+      tags$span(class=cls, paste0(sign, round(diff*1000,2), " vs avg"))
+    } else NULL
+    vs_pov <- if (!is.na(d$poverty_rate)) {
+      diff <- d$poverty_rate - nyc_avg_poverty
+      cls  <- if (diff <= 0) "vs-good" else "vs-bad"
+      sign <- if (diff > 0) "+" else ""
+      tags$span(class=cls, paste0(sign, round(diff,1),"% vs avg"))
+    } else NULL
+    vs_hvi <- if (!is.na(d$hvi)) {
+      diff <- d$hvi - nyc_avg_hvi
+      cls  <- if (diff <= 0) "vs-good" else "vs-bad"
+      sign <- if (diff > 0) "+" else ""
+      tags$span(class=cls, paste0(sign, round(diff,2)," vs avg"))
+    } else NULL
+
+    park_pct <- if(!is.na(d$park_acres_per_capita)) min(d$park_acres_per_capita/0.016*100,100) else 0
+    pov_pct  <- if(!is.na(d$poverty_rate))  min(d$poverty_rate/45*100,100) else 0
+    hvi_pct  <- if(!is.na(d$hvi))           min((d$hvi-1)/4*100,100) else 0
+
+    div(class="profile-card",
+      div(class="profile-name", d$district_name),
+      div(class="profile-tier",
+          style=paste0("background:",bg,";color:",col,";border:1px solid ",col), tc),
+      div(class="profile-metrics",
+        div(class="pm",
+          div(class="pm-label","Park Access"),
+          div(class="pm-value", fmt(d$park_acres_per_capita,2," ac/1k",1000)),
+          div(class="pm-avg",
+            paste0("NYC avg: ",round(nyc_avg_park*1000,2)," ac/1k  "), vs_park),
+          div(class="pm-bar",
+            div(class="pm-fill",
+                style=paste0("width:",park_pct,"%;background:#16a34a")))
+        ),
+        div(class="pm",
+          div(class="pm-label","Poverty Rate"),
+          div(class="pm-value", fmt(d$poverty_rate,1,"%")),
+          div(class="pm-avg",
+            paste0("NYC avg: ",round(nyc_avg_poverty,1),"%  "), vs_pov),
+          div(class="pm-bar",
+            div(class="pm-fill",
+                style=paste0("width:",pov_pct,"%;background:#7c3aed")))
+        ),
+        div(class="pm",
+          div(class="pm-label","Heat Vulnerability Index"),
+          div(class="pm-value", fmt(d$hvi,2)),
+          div(class="pm-avg",
+            paste0("NYC avg: ",round(nyc_avg_hvi,2),"  "), vs_hvi),
+          div(class="pm-bar",
+            div(class="pm-fill",
+                style=paste0("width:",hvi_pct,"%;background:#dc2626")))
+        ),
+        div(class="pm",
+          div(class="pm-label","Population"),
+          div(class="pm-value",
+              format(d$population, big.mark=",")),
+          div(class="pm-avg",
+            paste0("Park rank: #",d$park_rank_desc," of ",n_districts))
+        )
+      )
+    )
+  })
+
+  # ── SECTION 2: PARK ACCESS MAP ───────────────────────────
+  output$park_rank_ui <- renderUI({
+    df <- master %>%
+      filter(!is.na(park_acres_per_capita)) %>%
+      arrange(park_acres_per_capita) %>% head(15)
+    s <- sel()
+    tagList(lapply(seq_len(nrow(df)), function(i) {
+      d  <- df[i,]
+      div(class=paste("rank-row", if(!is.null(s)&&s==d$boro_cd)"sel" else ""),
+          onclick=paste0("Shiny.setInputValue('sel_cd',",d$boro_cd,",{priority:'event'})"),
+          div(class="rank-num", i),
+          div(class="rank-name", title=d$district_name, d$short_name),
+          div(class="rank-val", style="color:var(--red)",
+              paste0(round(d$park_acres_per_capita*1000,2),"ac"))
+      )
+    }))
+  })
+
+  output$map_park <- renderLeaflet({
+    leaflet(options=leafletOptions(zoomControl=TRUE)) %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng=-73.95, lat=40.70, zoom=10) %>%
+      addPolygons(
+        data        = master_sf,
+        layerId     = ~boro_cd,
+        fillColor   = ~park_pal(park_acres_per_capita),
+        fillOpacity = 0.7,
+        color       = "#ffffff", weight=0.8,
+        label       = ~lapply(apply(master_sf,1,function(r) make_tt(as.list(r))),HTML),
+        labelOptions = lbl_opts,
+        highlight   = highlightOptions(weight=2,color="#14532d",
+                        fillOpacity=0.9, bringToFront=TRUE)
+      ) %>%
+      addLegend("bottomleft", pal=park_pal, values=master$park_acres_per_capita,
+        title="Park ac/capita", opacity=0.9,
+        labFormat=labelFormat(transform=function(x) round(x*1000,2), suffix=" /1k"))
+  })
+
+  observeEvent(input$map_park_shape_click, {
+    req(input$map_park_shape_click$id)
+    sel(as.integer(input$map_park_shape_click$id))
+    updateSelectizeInput(session,"hero_search",
+      selected=as.character(input$map_park_shape_click$id))
+  })
+
+  # ── SECTION 3: INEQUALITY SCATTER ────────────────────────
+  s3_df <- reactive({
+    df <- master %>%
+      filter(!is.na(park_acres_per_capita), !is.na(poverty_rate), !is.na(pct_nonwhite))
+    if (!is.null(input$s3_pov))   df <- df %>% filter(poverty_rate >= input$s3_pov)
+    if (!is.null(input$s3_nw))    df <- df %>% filter(pct_nonwhite*100 >= input$s3_nw)
+    if (!is.null(input$s3_boro) && length(input$s3_boro)>0)
+      df <- df %>% filter(borough %in% input$s3_boro)
+    df
+  })
+
+  output$s3_count <- renderText(paste0(nrow(s3_df()), " districts"))
+
+  output$scatter_ineq <- renderPlotly({
+    df  <- s3_df()
+    sel_cd <- sel()
+    req(nrow(df)>0)
+    df$is_sel <- !is.null(sel_cd) & df$boro_cd == sel_cd
+
+    plot_ly() %>%
+      add_trace(
+        data      = df %>% filter(!is_sel),
+        x         = ~park_acres_per_capita*1000,
+        y         = ~poverty_rate,
+        color     = ~pct_nonwhite*100,
+        colors    = c("#dcfce7","#4ade80","#16a34a","#14532d"),
+        size      = ~population, sizes=c(6,40),
+        type="scatter", mode="markers",
+        marker    = list(opacity=0.75,
+                    line=list(width=0.5,color="rgba(255,255,255,0.6)")),
+        text      = ~paste0("<b>",district_name,"</b><br>",
+                            "Park: ",round(park_acres_per_capita*1000,2)," ac/1k<br>",
+                            "Poverty: ",round(poverty_rate,1),"%<br>",
+                            "Non-white: ",round(pct_nonwhite*100,1),"%<br>",
+                            "Pop: ",format(population,big.mark=",")),
+        hoverinfo = "text", name="Districts"
+      ) %>%
+      add_trace(
+        data      = df %>% filter(is_sel),
+        x         = ~park_acres_per_capita*1000,
+        y         = ~poverty_rate,
+        type="scatter", mode="markers+text",
+        marker    = list(color="#14532d",size=14,opacity=1,
+                    symbol="star",line=list(width=2,color="#ffffff")),
+        text      = ~short_name, textposition="top right",
+        textfont  = list(color="#14532d",size=11,family="Inter"),
+        hoverinfo = "text", name="Selected"
+      ) %>%
+      layout(
+        paper_bgcolor = "#ffffff", plot_bgcolor="#f8faf8",
+        font   = list(family="Inter", color="#111827", size=11),
+        xaxis  = list(title="Park Acres per 1,000 Population",
+                      gridcolor="#e5e7eb", zerolinecolor="#e5e7eb"),
+        yaxis  = list(title="Poverty Rate (%)",
+                      gridcolor="#e5e7eb", zerolinecolor="#e5e7eb"),
+        coloraxis = list(
+          colorbar=list(title="% Non-white",
+            tickfont=list(color="#6b7280"),
+            titlefont=list(color="#6b7280"))
+        ),
+        legend = list(font=list(color="#6b7280")),
+        margin = list(l=50,r=20,t=20,b=50),
+        shapes = list(
+          list(type="line", x0=nyc_avg_park*1000, x1=nyc_avg_park*1000,
+               y0=0, y1=50, line=list(color="#16a34a",dash="dot",width=1.5)),
+          list(type="line", x0=0, x1=25, y0=nyc_avg_poverty, y1=nyc_avg_poverty,
+               line=list(color="#7c3aed",dash="dot",width=1.5))
+        ),
+        annotations = list(
+          list(x=0.02,y=0.97,xref="paper",yref="paper",
+               text="← Low park + high poverty",
+               showarrow=FALSE,font=list(size=10,color="#dc2626"),xanchor="left"),
+          list(x=nyc_avg_park*1000+0.1,y=2,xref="x",yref="y",
+               text="NYC avg park",showarrow=FALSE,
+               font=list(size=9,color="#16a34a"),xanchor="left"),
+          list(x=0.5,y=nyc_avg_poverty+0.5,xref="x",yref="y",
+               text="NYC avg poverty",showarrow=FALSE,
+               font=list(size=9,color="#7c3aed"),xanchor="left")
+        )
+      ) %>%
+      config(displayModeBar=FALSE)
+  })
+
+  # ── SECTION 4: HEAT SCATTER + MAP ────────────────────────
+  output$scatter_heat <- renderPlotly({
+    df     <- master %>% filter(!is.na(park_acres_per_capita),!is.na(hvi))
+    sel_cd <- sel()
+    df$is_sel <- !is.null(sel_cd) & df$boro_cd==sel_cd
+
+    plot_ly() %>%
+      add_trace(
+        data      = df %>% filter(!is_sel),
+        x         = ~park_acres_per_capita*1000,
+        y         = ~hvi,
+        color     = ~poverty_rate,
+        colors    = c("#f0fdf4","#86efac","#16a34a","#7c3aed","#4c1d95"),
+        size      = ~population, sizes=c(6,40),
+        type="scatter", mode="markers",
+        marker    = list(opacity=0.75,
+                    line=list(width=0.5,color="rgba(255,255,255,0.6)")),
+        text      = ~paste0("<b>",district_name,"</b><br>",
+                            "Park: ",round(park_acres_per_capita*1000,2)," ac/1k<br>",
+                            "HVI: ",round(hvi,2),"<br>",
+                            "Poverty: ",round(poverty_rate,1),"%"),
+        hoverinfo = "text", name="Districts"
+      ) %>%
+      add_trace(
+        data      = df %>% filter(is_sel),
+        x         = ~park_acres_per_capita*1000,
+        y         = ~hvi,
+        type="scatter", mode="markers+text",
+        marker    = list(color="#14532d",size=14,opacity=1,
+                    symbol="star",line=list(width=2,color="#ffffff")),
+        text      = ~short_name, textposition="top right",
+        textfont  = list(color="#14532d",size=11,family="Inter"),
+        hoverinfo = "text", name="Selected"
+      ) %>%
+      layout(
+        paper_bgcolor="#ffffff", plot_bgcolor="#f8faf8",
+        font   = list(family="Inter",color="#111827",size=11),
+        xaxis  = list(title="Park Acres per 1,000 Population",
+                      gridcolor="#e5e7eb",zerolinecolor="#e5e7eb"),
+        yaxis  = list(title="Heat Vulnerability Index",
+                      gridcolor="#e5e7eb",zerolinecolor="#e5e7eb"),
+        coloraxis = list(
+          colorbar=list(title="Poverty Rate (%)",
+            tickfont=list(color="#6b7280"),
+            titlefont=list(color="#6b7280"))
+        ),
+        legend = list(font=list(color="#6b7280")),
+        margin = list(l=50,r=20,t=20,b=50),
+        shapes = list(
+          list(type="rect",x0=0,x1=1,y0=3.5,y1=6,
+               fillcolor="rgba(220,38,38,0.06)",
+               line=list(color="rgba(220,38,38,0.25)",width=1)),
+          list(type="line",x0=nyc_avg_park*1000,x1=nyc_avg_park*1000,
+               y0=0,y1=6,line=list(color="#16a34a",dash="dot",width=1.5)),
+          list(type="line",x0=0,x1=20,y0=nyc_avg_hvi,y1=nyc_avg_hvi,
+               line=list(color="#dc2626",dash="dot",width=1.5))
+        ),
+        annotations = list(
+          list(x=0.02,y=0.97,xref="paper",yref="paper",
+               text="▲ High risk: low park + high heat",
+               showarrow=FALSE,font=list(size=10,color="#dc2626"),xanchor="left")
+        )
+      ) %>%
+      config(displayModeBar=FALSE)
+  })
+
+  output$map_hvi <- renderLeaflet({
+    leaflet(options=leafletOptions(zoomControl=FALSE)) %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng=-73.95,lat=40.70,zoom=9) %>%
+      addPolygons(
+        data        = master_sf, layerId=~boro_cd,
+        fillColor   = ~hvi_pal(hvi), fillOpacity=0.75,
+        color="#ffffff", weight=0.8,
+        label       = ~lapply(apply(master_sf,1,function(r) make_tt(as.list(r))),HTML),
+        labelOptions = lbl_opts,
+        highlight   = highlightOptions(weight=2,color="#14532d",
+                        fillOpacity=0.9,bringToFront=TRUE)
+      ) %>%
+      addLegend("bottomleft",pal=hvi_pal,values=master$hvi,
+        title="Heat Vulnerability Index",opacity=0.9)
+  })
+
+  observeEvent(input$map_hvi_shape_click, {
+    req(input$map_hvi_shape_click$id)
+    sel(as.integer(input$map_hvi_shape_click$id))
+    updateSelectizeInput(session,"hero_search",
+      selected=as.character(input$map_hvi_shape_click$id))
+  })
+
+  # ── SECTION 5: PRIORITY MAP ──────────────────────────────
+
+  # Active tier chips
+  active_tiers <- reactive({
+    chips <- input$s5_chips
+    map_c <- c("vh"="Very high priority","hi"="High priority",
+                "mo"="Moderate priority","lo"="Lower priority")
+    if (is.null(chips)||chips=="") return(unname(map_c))
+    unname(map_c[str_split(chips,",")[[1]]])
+  })
+
+  # Simulated scores
+  sim_data <- eventReactive(input$apply_sim, {
+    total <- input$w_park + input$w_poverty + input$w_hvi
+    if (total==0) return(master %>% mutate(sim_tier=priority_tier))
+    wp <- input$w_park/total
+    wv <- input$w_poverty/total
+    wh <- input$w_hvi/total
+    master %>%
+      mutate(
+        sim_score = park_norm*wp + poverty_norm*wv + hvi_norm*wh,
+        sim_tier  = factor(case_when(
+          sim_score >= quantile(sim_score,0.75,na.rm=TRUE) ~ "Very high priority",
+          sim_score >= quantile(sim_score,0.50,na.rm=TRUE) ~ "High priority",
+          sim_score >= quantile(sim_score,0.25,na.rm=TRUE) ~ "Moderate priority",
+          TRUE ~ "Lower priority"),
+          levels=c("Very high priority","High priority","Moderate priority","Lower priority"))
+      )
+  }, ignoreNULL=FALSE)
+
+  output$sim_check <- renderUI({
+    total <- (if(is.null(input$w_park) || is.na(input$w_park)) 44 else input$w_park) +
+             (if(is.null(input$w_poverty) || is.na(input$w_poverty)) 25 else input$w_poverty) +
+             (if(is.null(input$w_hvi) || is.na(input$w_hvi)) 31 else input$w_hvi)
+    col <- if(total==100) "var(--green)" else "var(--orange)"
+    ok  <- if(total==100) " ✓" else " (adjust to reach 100)"
+    div(style=paste0("font-size:10px;color:",col,";margin-top:-4px"),
+      paste0("Total: ",total,"%",ok))
+  })
+
+  output$priority_rank_ui <- renderUI({
+    df_sim <- sim_data()
+    tiers  <- active_tiers()
+    df <- df_sim %>%
+      filter(as.character(priority_tier) %in% tiers) %>%
+      arrange(desc(overall_score)) %>% head(12)
+    s <- sel()
+    tagList(lapply(seq_len(nrow(df)), function(i) {
+      d  <- df[i,]
+      tc <- as.character(d$priority_tier)
+      co <- tier_colors[tc]
+      div(class=paste("rank-row",if(!is.null(s)&&s==d$boro_cd)"sel"else""),
+          onclick=paste0("Shiny.setInputValue('sel_cd',",d$boro_cd,",{priority:'event'})"),
+          div(class="rank-num",i),
+          div(class="rank-name",title=d$district_name,d$short_name),
+          div(class="rank-val",style=paste0("color:",co),d$overall_score)
+      )
+    }))
+  })
+
+  output$map_priority <- renderLeaflet({
+    leaflet(options=leafletOptions(zoomControl=TRUE)) %>%
+      addProviderTiles("CartoDB.Positron") %>%
+      setView(lng=-73.95,lat=40.70,zoom=10)
+  })
+
+  observe({
+    df_sim <- sim_data()
+    tiers  <- active_tiers()
+    s      <- sel()
+
+    sf_plot <- master_sf %>%
+      left_join(df_sim %>% select(boro_cd,sim_tier), by="boro_cd") %>%
+      mutate(
+        display_tier = if("sim_tier" %in% names(.)) sim_tier else priority_tier,
+        visible = as.character(display_tier) %in% tiers
+      )
+
+    leafletProxy("map_priority") %>%
+      clearShapes() %>% clearControls() %>%
+      addPolygons(
+        data        = sf_plot, layerId=~boro_cd,
+        fillColor   = ~ifelse(visible, tier_pal(display_tier), "#e5e7eb"),
+        fillOpacity = ~ifelse(!is.null(s)&boro_cd==s, 0.95,
+                       ifelse(visible, 0.7, 0.2)),
+        color       = ~ifelse(!is.null(s)&boro_cd==s,"#14532d",
+                       ifelse(visible, "#ffffff","#d1d5db")),
+        weight      = ~ifelse(!is.null(s)&boro_cd==s, 3, 0.8),
+        label       = ~lapply(apply(sf_plot,1,function(r) make_tt(as.list(r))),HTML),
+        labelOptions = lbl_opts,
+        highlight   = highlightOptions(weight=2,color="#14532d",
+                        fillOpacity=0.9,bringToFront=TRUE)
+      ) %>%
+      addLegend("bottomleft",
+        colors  = unname(tier_colors),
+        labels  = names(tier_colors),
+        title   = "Priority Tier",
+        opacity = 0.9
+      )
+  })
+
+  observeEvent(input$map_priority_shape_click, {
+    req(input$map_priority_shape_click$id)
+    sel(as.integer(input$map_priority_shape_click$id))
+    updateSelectizeInput(session,"hero_search",
+      selected=as.character(input$map_priority_shape_click$id))
+  })
+
+  # Priority detail + breakdown
+  output$priority_detail <- renderUI({
+    s <- sel()
+    if (is.null(s)) return(NULL)
+    d <- master %>% filter(boro_cd==s)
+    if (nrow(d)==0) return(NULL)
+    d  <- d[1,]
+    tc <- as.character(d$priority_tier)
+    co <- tier_colors[tc]
+    bg <- paste0(co,"15")
+
+    div(class="card",
+      div(class="card-hd",
+        d$district_name, " — ",
+        tags$span(style=paste0("background:",bg,";color:",co,
+          ";padding:2px 8px;border-radius:8px;font-size:11px;border:1px solid ",co),
+          tc)
+      ),
+      div(class="card-body",
+        div(style="display:flex;gap:16px;align-items:flex-start",
+          # Score
+          div(style=paste0("font-size:40px;font-family:'Playfair Display',serif;",
+            "color:",co,";line-height:1;flex-shrink:0"),
+            d$overall_score,
+            div(style="font-size:11px;color:var(--muted);font-family:'Inter',sans-serif",
+              "out of 12")
+          ),
+          # Breakdown bars
+          div(class="breakdown", style="flex:1",
+            div(class="bd-row",
+              div(class="bd-hd",
+                div(class="bd-lbl","Park Access (43.75%)"),
+                div(class="bd-val",paste0(d$park_rank,"/4"))),
+              div(class="bd-track",
+                div(class="bd-fill",
+                    style=paste0("width:",round(d$park_rank/4*100),
+                      "%;background:#16a34a")))
+            ),
+            div(class="bd-row",
+              div(class="bd-hd",
+                div(class="bd-lbl","Poverty (25%)"),
+                div(class="bd-val",paste0(d$poverty_rank,"/4"))),
+              div(class="bd-track",
+                div(class="bd-fill",
+                    style=paste0("width:",round(d$poverty_rank/4*100),
+                      "%;background:#7c3aed")))
+            ),
+            div(class="bd-row",
+              div(class="bd-hd",
+                div(class="bd-lbl","Heat/HVI (31.25%)"),
+                div(class="bd-val",paste0(d$hvi_rank,"/4"))),
+              div(class="bd-track",
+                div(class="bd-fill",
+                    style=paste0("width:",round(d$hvi_rank/4*100),
+                      "%;background:#dc2626")))
+            )
+          )
+        )
+      )
+    )
+  })
+
+  # ── COMPARE TABLE ─────────────────────────────────────────
+  output$compare_table <- renderTable({
+    req(input$cmp_a, input$cmp_b)
+    da <- master %>% filter(boro_cd==as.integer(input$cmp_a)) %>% slice(1)
+    db <- master %>% filter(boro_cd==as.integer(input$cmp_b)) %>% slice(1)
+    req(nrow(da)>0, nrow(db)>0)
+
+    fmt <- function(x, digits=2, suf="", mult=1) {
+      if(is.na(x)) "N/A" else paste0(round(x*mult,digits),suf)
+    }
+
+    col_a <- da$short_name
+    col_b <- db$short_name
+    tbl <- tibble(
+      Metric        = c("Overall Priority Score","Priority Tier",
+                        "Park Access (ac/1k pop)","Total Park Acres",
+                        "Population","Poverty Rate",
+                        "Heat Vulnerability Index","% Non-white",
+                        "Park Rank (NYC)"),
+      A             = c(
+        paste0(da$overall_score,"/12"),
+        as.character(da$priority_tier),
+        fmt(da$park_acres_per_capita,3,mult=1000),
+        fmt(da$park_acres,1," ac"),
+        format(da$population,big.mark=","),
+        fmt(da$poverty_rate,1,"%"),
+        fmt(da$hvi,2),
+        fmt(da$pct_nonwhite,1,"%",100),
+        paste0("#",da$park_rank_desc," of ",n_districts)
+      ),
+      B             = c(
+        paste0(db$overall_score,"/12"),
+        as.character(db$priority_tier),
+        fmt(db$park_acres_per_capita,3,mult=1000),
+        fmt(db$park_acres,1," ac"),
+        format(db$population,big.mark=","),
+        fmt(db$poverty_rate,1,"%"),
+        fmt(db$hvi,2),
+        fmt(db$pct_nonwhite,1,"%",100),
+        paste0("#",db$park_rank_desc," of ",n_districts)
+      )
+    )
+    names(tbl)[2] <- col_a
+    names(tbl)[3] <- col_b
+    tbl
+  }, striped=TRUE, hover=TRUE, bordered=FALSE,
+     colnames=TRUE, width="100%"
+  )
+}
+
+# ============================================================
+# 7. RUN
+# ============================================================
+
+shinyApp(ui=ui, server=server)
+```
+

@@ -1,0 +1,8 @@
+"0","demographics_clean <- demographics_clean %>%"
+"0","  mutate("
+"0","    pct_white_nonhisp_2010 = white_nonhisp_2010 / population_2010,"
+"0","    pct_black_nonhisp_2010 = black_nonhisp_2010 / population_2010,"
+"0","    pct_asian_pi_nonhisp_2010 = asian_pi_nonhisp_2010 / population_2010,"
+"0","    pct_hispanic_2010 = hispanic_2010 / population_2010,"
+"0","    pct_nonwhite_2010 = 1 - pct_white_nonhisp_2010"
+"0","  )"
