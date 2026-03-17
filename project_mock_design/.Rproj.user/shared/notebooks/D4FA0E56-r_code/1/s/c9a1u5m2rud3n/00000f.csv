@@ -1,5 +1,0 @@
-"0","demo_raw <- read_excel("
-"0","  ""data/sf1_dp_cd_demoprofile.xlsx"","
-"0","  sheet = ""CD Profiles"","
-"0","  col_names = FALSE"
-"0",")"

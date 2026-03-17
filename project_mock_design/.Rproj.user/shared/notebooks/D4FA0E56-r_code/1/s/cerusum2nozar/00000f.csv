@@ -1,6 +1,0 @@
-"0","dir.create(""clean_data"", recursive = TRUE, showWarnings = FALSE)"
-"0",""
-"0","write_csv("
-"0","  demographics_clean,"
-"0","  ""clean_data/demographics_cd_clean.csv"""
-"0",")"
